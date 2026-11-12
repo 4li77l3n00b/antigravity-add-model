@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=codex%2Fdesktop-acp-ssh" alt="CI"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js 22.13 или новее"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-2563eb" alt="Лицензия Apache 2.0"></a>
 </p>

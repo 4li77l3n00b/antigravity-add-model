@@ -1,3 +1,6 @@
 # Keep executable/imported scripts compatible with Unix shells and Vite's hashbang parser.
 *.mjs text eol=lf
 *.sh text eol=lf
+
+# Keep inline source-map contents reproducible across Windows and POSIX checkouts.
+*.ts text eol=lf
