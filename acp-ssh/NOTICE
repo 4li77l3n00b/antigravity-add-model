@@ -1,0 +1,21 @@
+ACP SSH component
+Copyright 2026 ACP SSH contributors
+
+Licensed under the Apache License, Version 2.0. See LICENSE.
+
+This component consists of original persistent ACP transport, local gateway and
+native-swarm adapter code prepared for integration into a fork of
+vahapogut/antigravity-add-model. The target project's existing notices and license
+must also be retained when integrating this directory.
+
+The LICENSE text was obtained unchanged from that project's LICENSE (Git blob
+261eeb9e9f8b2b4b0d119366dda99c6fd7d35c64), identified by GitHub as Apache-2.0.
+
+Antigravity/agy is separately installed proprietary software and is not included
+or relicensed by this component. No vendor binary, extracted vendor source,
+user conversation, credential, or production configuration is distributed here.
+The native agent definition is an original configuration for registered tools,
+not a copy of the vendor's native-swarm skill or implementation.
+
+Legacy protocol namespaces containing "maichart" are retained solely for
+compatibility with existing clients; they do not require that project or its data.
