@@ -158,6 +158,7 @@ declare module 'electron' {
   };
 
   export const contextBridge: {
+    executeInMainWorld(options: { func: (...args: any[]) => any; args?: any[] }): any;
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     exposeInMainWorld(key: string, api: any): void;
   };

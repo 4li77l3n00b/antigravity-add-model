@@ -34,6 +34,7 @@ var __importStar = (this && this.__importStar) || (function () {
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.createModelActions = createModelActions;
+const customNodes_1 = require("./customNodes");
 const diagnostics_1 = require("./diagnostics");
 const path = __importStar(require("node:path"));
 const modelIdentity_1 = require("./modelIdentity");
@@ -41,14 +42,29 @@ const modelUtils_1 = require("./proxy/modelUtils");
 const chatContext_1 = require("./chatContext");
 function createModelActions(manager) {
     return {
+        'storage:get-custom-nodes': () => manager.nodes.list(),
+        'storage:save-custom-node': (input) => manager.nodes.save(input),
+        'storage:delete-custom-node': (name) => manager.nodes.delete(name),
+        'storage:save-node-model': (input) => manager.nodes.saveBinding(input),
+        'storage:get-native-gemini-models': () => (0, customNodes_1.nativeGeminiTargets)(path.dirname(manager.store.filename)),
+        'storage:discover-node-models': (name) => {
+            const node = manager.nodes.store.read().find((n) => n.name === name);
+            if (!node)
+                throw new Error('Unknown custom node.');
+            return manager.discoverModels({ ...node, name: node.name });
+        },
         'storage:get-custom-models': () => {
-            const models = manager.store.list();
+            const nodes = manager.nodes.list();
+            const models = manager.store.list().map((model) => ({
+                ...model,
+                nodeEnabled: !model.nodeId || nodes.some((node) => node.name === model.nodeId && node.enabled !== false),
+            }));
             // The proxy and both management transports share the same persistent
             // native identity registry. Do not regenerate enum IDs in the renderer.
             let identities = [];
             let identityError;
             try {
-                identities = (0, modelIdentity_1.allocateModelIdentities)(path.dirname(manager.store.filename), models);
+                identities = (0, modelIdentity_1.allocateModelIdentities)(path.dirname(manager.store.filename), models.filter((model) => !model.nativeOverrideId));
             }
             catch (error) {
                 // Listing/editing saved providers remains possible when the identity
@@ -75,7 +91,7 @@ function createModelActions(manager) {
                     nativeContextWindow: capabilities.maxTokens,
                     nativeMaxOutputTokens: capabilities.maxOutputTokens,
                     nativeModelExperiments: (0, modelUtils_1.nativeModelExperiments)(model),
-                    nativePickerError: identity?.placeholderId
+                    nativePickerError: model.nativeOverrideId || identity?.placeholderId
                         ? undefined
                         : identityError ||
                             'Native model picker capacity reached; direct API alias remains available. 651 supported slots include native reservations and retained deleted models.',

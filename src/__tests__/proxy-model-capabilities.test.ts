@@ -1,3 +1,8 @@
+import * as upstreamToolsModule from '../proxy/upstreamTools';
+import * as nativeTransportModule from '../proxy/nativeTransport';
+import * as localTranscriptionModule from '../proxy/localTranscription';
+import * as nativeVoiceModule from '../proxy/nativeVoice';
+import * as voiceTransportModule from '../proxy/voiceTransport';
 import * as googlePoolFailover from '../proxy/googlePoolFailover';
 import * as loopbackSecurity from '../proxy/loopbackSecurity';
 import * as subagentRoutingModule from '../proxy/subagentRouting';
@@ -16,7 +21,7 @@ import { validateCustomModel } from '../schemaValidator';
 import * as modelCatalog from '../proxy/modelCatalog';
 import { runCustomModelRequest } from '../proxy/customRequest';
 import { stopCleanupInterval } from '../proxy/shared';
-import { allocateModelIdentities, IdentityModel } from '../modelIdentity';
+import { allocateModelIdentities, placeholderIndex, IdentityModel } from '../modelIdentity';
 
 const identityDirectories: string[] = [];
 afterAll(() => {
@@ -101,14 +106,25 @@ function requestModels(
     './proxy/nativeSubagentResponse': nativeSubagentResponse,
     './proxy/cloudCodeRouting': {},
     './modelIdentity': {
+      placeholderIndex,
       allocateModelIdentities: (_directory: string, models: IdentityModel[], upstream?: unknown) =>
         allocateModelIdentities(identityDirectory, models, upstream),
     },
     './proxy/customRequest': { runCustomModelRequest },
+    './customNodes': {
+      rememberNativeGeminiCatalog: () => {},
+      readRuntimeModelConfig: (...args: any[]) =>
+        (dependencies['./modelStore'] as any).readModelConfig?.(...args) || [],
+    },
     './modelStore': { readModelConfig: () => models },
     './cryptoStore': { decryptModels: (value: unknown) => value },
     './schemaValidator': { validateCustomModel },
     './proxy/loopbackSecurity': loopbackSecurity,
+    './proxy/upstreamTools': upstreamToolsModule,
+    './proxy/nativeTransport': nativeTransportModule,
+    './proxy/localTranscription': localTranscriptionModule,
+    './proxy/nativeVoice': nativeVoiceModule,
+    './proxy/voiceTransport': voiceTransportModule,
     './proxy/listen': {},
   };
   const module = { exports: {} as { handleRequest: http.RequestListener } };
@@ -182,8 +198,11 @@ describe('custom model vision capability advertisement', () => {
   );
   it('keeps real context limits in the provider-facing model listing with native compatibility enabled', () => {
     const response = requestModels('/v1beta/models', { models: [] }, undefined, {
-      provider: 'ollama', externalModelName: 'qwen3.8:27b', contextWindow: 85000,
-      maxOutputTokens: 8192, compactionThresholdPercent: 80,
+      provider: 'ollama',
+      externalModelName: 'qwen3.8:27b',
+      contextWindow: 85000,
+      maxOutputTokens: 8192,
+      compactionThresholdPercent: 80,
     });
     expect(response.models).toHaveLength(3);
     for (const entry of response.models) {
@@ -212,6 +231,30 @@ describe('custom model vision capability advertisement', () => {
 });
 
 describe('IDE Cloud Code catalog and picker groups', () => {
+  it.each([
+    {},
+    { audioTranscriptionModelIds: ['native-asr'] },
+    { audio_transcription_model_ids: ['native-asr'] },
+    { audioTranscriptionModelIds: ['native-asr'], audio_transcription_model_ids: ['native-asr'] },
+  ])('emits only one protobuf JSON transcription field when site voice is enabled: %j', (upstream) => {
+    const response = requestModels('/v1internal:fetchAvailableModels', { models: {}, ...upstream }, undefined, {
+      toolProxy: true,
+    });
+    expect(response.audioTranscriptionModelIds).toEqual([]);
+    // protojson accepts either spelling, but rejects both as a duplicate field
+    // while the native language server initializes the signed-in account.
+    expect(response).not.toHaveProperty('audio_transcription_model_ids');
+  });
+
+  it('preserves native transcription models when site tools are not configured', () => {
+    const response = requestModels('/v1internal:fetchAvailableModels', {
+      models: {},
+      audioTranscriptionModelIds: ['native-asr'],
+    });
+    expect(response.audioTranscriptionModelIds).toEqual(['native-asr']);
+    expect(response).not.toHaveProperty('audio_transcription_model_ids');
+  });
+
   function customIds(response: Record<string, any>): string[] {
     const collection = response.models || response.availableModels || response.available_models;
     return Array.isArray(collection)
@@ -278,18 +321,24 @@ describe('IDE Cloud Code catalog and picker groups', () => {
   });
 
   it.each(['models', 'availableModels', 'available_models'])(
-    'adds the bounded native compatibility floor with a checkpoint policy based on real limits in %s', (key) => {
+    'adds the bounded native compatibility floor with a checkpoint policy based on real limits in %s',
+    (key) => {
       const native = { displayName: 'Native', maxTokens: 128000 };
       const response = requestModels('/v1internal:fetchAvailableModels', { [key]: { native } }, undefined, {
-        provider: 'ollama', externalModelName: 'qwen3.8:27b', contextWindow: 85000,
-        maxOutputTokens: 8192, compactionThresholdPercent: 80,
+        provider: 'ollama',
+        externalModelName: 'qwen3.8:27b',
+        contextWindow: 85000,
+        maxOutputTokens: 8192,
+        compactionThresholdPercent: 80,
       });
       expect(response[key].native).toEqual(native);
       for (const id of customIds(response)) {
         const entry = response[key][id];
         expect(entry).toMatchObject({ maxTokens: 90000, maxOutputTokens: 8192 });
-        expect(JSON.parse(entry.modelExperiments.experiments.CASCADE_USE_EXPERIMENT_CHECKPOINTER.stringValue))
-          .toEqual({ tokenThreshold: 68000, maxTokenLimit: 75784 });
+        expect(JSON.parse(entry.modelExperiments.experiments.CASCADE_USE_EXPERIMENT_CHECKPOINTER.stringValue)).toEqual({
+          tokenThreshold: 68000,
+          maxTokenLimit: 75784,
+        });
       }
     },
   );
@@ -341,7 +390,7 @@ describe('IDE Cloud Code catalog and picker groups', () => {
     expect(custom.every((entry) => entry.model !== native.native.model)).toBe(true);
   });
 
-  it.each(['slug', 'enum', 'numeric', 'modelId-only', 'saved-name'])(
+  it.each(['slug', 'enum', 'numeric', 'modelId-only', 'saved-name', 'override-number', 'override-enum', 'override-id'])(
     'routes every emitted effort variant by %s to its saved reasoning setting through the real translator',
     async (selector) => {
       const captured: { model: string; reasoning_effort: string }[] = [];
@@ -367,6 +416,12 @@ describe('IDE Cloud Code catalog and picker groups', () => {
           apiUrl: `http://127.0.0.1:${(upstream.address() as { port: number }).port}/v1`,
           externalModelName: 'same-upstream',
           reasoningEffort: effort,
+          ...(selector.startsWith('override-')
+            ? {
+                nativeOverrideId: `gemini-${effort}`,
+                nativeOverrideModel: 1437 + ['low', 'medium', 'high'].indexOf(effort),
+              }
+            : {}),
           maxRetries: 0,
         }));
         // An exact saved name must win over another model's generated routing alias.
@@ -374,7 +429,16 @@ describe('IDE Cloud Code catalog and picker groups', () => {
         let handler: http.RequestListener | undefined;
         const catalog = requestModels(
           '/v1internal:fetchAvailableModels',
-          { models: {} },
+          {
+            models: selector.startsWith('override-')
+              ? Object.fromEntries(
+                  models.map((model) => [
+                    model.nativeOverrideId,
+                    { displayName: model.displayName, model: model.nativeOverrideModel },
+                  ]),
+                )
+              : {},
+          },
           undefined,
           {},
           {
@@ -388,7 +452,7 @@ describe('IDE Cloud Code catalog and picker groups', () => {
         await new Promise<void>((resolve) => proxy!.listen(0, '127.0.0.1', resolve));
         expect(new Set(Object.values(catalog.models).map((entry: any) => entry.model)).size).toBe(3);
         for (const model of models) {
-          const slug = modelCatalog.catalogModelSlug(model, models);
+          const slug = model.nativeOverrideId || modelCatalog.catalogModelSlug(model, models);
           expect(catalog.models[slug].displayName).toBe(model.displayName);
           const enumName = catalog.models[slug].model;
           const identity =
@@ -396,13 +460,19 @@ describe('IDE Cloud Code catalog and picker groups', () => {
               ? { modelId: enumName }
               : {
                   model:
-                    selector === 'saved-name'
-                      ? model.name
-                      : selector === 'slug'
-                        ? slug
-                        : selector === 'numeric'
-                          ? Number(enumName.slice('MODEL_PLACEHOLDER_M'.length)) + 1000
-                          : enumName,
+                    selector === 'override-number'
+                      ? model.nativeOverrideModel
+                      : selector === 'override-enum'
+                        ? `MODEL_PLACEHOLDER_M${model.nativeOverrideModel! - 1000}`
+                        : selector === 'override-id'
+                          ? model.nativeOverrideId
+                          : selector === 'saved-name'
+                            ? model.name
+                            : selector === 'slug'
+                              ? slug
+                              : selector === 'numeric'
+                                ? Number(enumName.slice('MODEL_PLACEHOLDER_M'.length)) + 1000
+                                : enumName,
                 };
           const response = await fetch(
             `http://127.0.0.1:${(proxy.address() as { port: number }).port}/v1internal:generateContent`,

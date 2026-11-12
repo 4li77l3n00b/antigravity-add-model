@@ -7,7 +7,7 @@ const compiled = ts.transpileModule(readFileSync('src/desktop.ts', 'utf8'), {
   compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2020 },
 }).outputText;
 
-async function fixture(proxyPort = 50999, lsPort = 54321) {
+async function fixture(proxyPort = 50999, lsPort = 54321, tools = false) {
   const events = new Map<string, (...args: unknown[]) => void>();
   let intercept: (details: { url: string }, callback: ReturnType<typeof vi.fn>) => void;
   const register = vi.fn();
@@ -22,7 +22,17 @@ async function fixture(proxyPort = 50999, lsPort = 54321) {
       dialog: { showErrorBox },
     },
     './customIpc': { registerCustomModelHandlers: register },
-    './proxy': { getProxyPort: () => proxyPort, stopProxy: stop, setLanguageServerPortResolver },
+    './remoteAcpIpc': { registerRemoteAcp: vi.fn() },
+    './proxy/localTranscription': {
+      LOCAL_AUDIO_METHODS: ['StreamAudioTranscription', 'SendAudioChunk', 'EndAudioSession'],
+      LOCAL_AUDIO_PATH: '/__model_patch/audio/',
+    },
+    './proxy': {
+      isToolProxyConfigured: () => tools,
+      getProxyPort: () => proxyPort,
+      stopProxy: stop,
+      setLanguageServerPortResolver,
+    },
   };
   runInNewContext(compiled, { exports: exported, require: (name) => dependencies[name], URL, console });
   exported.install!(() => lsPort);
@@ -77,6 +87,20 @@ describe('additive desktop integration', () => {
     const f = await fixture(proxy, ls);
     expect(f.request(`https://127.0.0.1:54321${route}SetCloudCodeURL`)).toEqual({});
   });
+
+  it.each(['StreamAudioTranscription', 'SendAudioChunk', 'EndAudioSession'])(
+    'redirects configured dictation %s and preserves the original route without a source',
+    async (method) => {
+      const enabled = await fixture(50999, 54321, true);
+      expect(enabled.request(`https://127.0.0.1:54321${route}${method}`)).toEqual({
+        redirectURL: `http://127.0.0.1:50999/__model_patch/audio/${method}`,
+      });
+      expect(enabled.request(`https://evil.example:54321${route}${method}`)).toEqual({});
+      expect(enabled.request(`https://127.0.0.1:11111${route}${method}`)).toEqual({});
+      const disabled = await fixture();
+      expect(disabled.request(`https://127.0.0.1:54321${route}${method}`)).toEqual({});
+    },
+  );
 
   it('closes its proxy on exit', async () => {
     const f = await fixture();

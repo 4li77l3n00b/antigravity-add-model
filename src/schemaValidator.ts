@@ -13,6 +13,7 @@
 
 import { PROVIDERS, workersAiAccountPath } from './providers';
 import { COMPACTION_TOKEN_RESERVE, NATIVE_DEFAULT_CHECKPOINT_THRESHOLD, detectModelCapabilities } from './proxy/modelUtils';
+import { toolServiceBase } from './proxy/upstreamTools';
 
 interface ValidationResult {
   valid: boolean;
@@ -144,8 +145,12 @@ export function validateCustomModel(model: unknown): ValidationResult {
     return { valid: false, error: 'apiFormat must be openai, anthropic or google' };
   }
   if (m.provider === 'google-cloudcode' && m.apiFormat !== undefined && m.apiFormat !== 'google') return { valid: false, error: 'Google Cloud Code requires the google API format' };
-  for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'encryptedHeaders', 'encryptedGoogleAccounts']) {
+  for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'encryptedHeaders', 'encryptedGoogleAccounts', 'toolProxy']) {
     if (m[field] !== undefined && typeof m[field] !== 'boolean') return { valid: false, error: `${field} must be a boolean` };
+  }
+  if (m.toolProxy === true) {
+    try { toolServiceBase(apiUrl); } catch (error) { return { valid: false, error: (error as Error).message }; }
+    if (m.provider === 'google-cloudcode' || m.allowUnauthorized === true || !m.apiKey || m.apiKey === 'none') return { valid: false, error: 'TokenNest tool proxy requires an API key and verified TLS, without Google OAuth account mode' };
   }
   for (const field of ['reasoningEffort', 'compactionReasoningEffort']) {
     if (m[field] !== undefined && !['none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(m[field] as string)) {

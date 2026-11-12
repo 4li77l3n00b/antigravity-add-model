@@ -40,7 +40,7 @@ async function standalone() {
   put(path.join(source, 'package.json'), JSON.stringify({ main: 'dist/main.js', version: '2.0.1' }));
   put(path.join(source, 'dist/main.js'), "const electron_1 = require('electron'); electron_1.app.whenReady().then(() => {});\n");
   put(path.join(source, 'dist/preload.js'), "const electron_1 = require('electron'); electron_1.contextBridge.exposeInMainWorld('wsl', { getState: () => electron_1.ipcRenderer.invoke('wsl:get-state') });\n");
-  put(path.join(source, 'dist/languageServer.js'), "function startLanguageServer(port, csrf, options = {}) { const { headless, wsl } = options; return new Promise((resolve, reject) => { const args = ['--api_server_url', 'https://generativelanguage.googleapis.com', '--cloud_code_endpoint', 'https://daily-cloudcode-pa.googleapis.com']; resolve({port,args}); }); }\n");
+  put(path.join(source, 'dist/languageServer.js'), "function startLanguageServer(port, csrf, options = {}) { const { headless, wsl } = options; return new Promise((resolve, reject) => { const env = {}; const args = ['--api_server_url', 'https://generativelanguage.googleapis.com', '--cloud_code_endpoint', 'https://daily-cloudcode-pa.googleapis.com']; resolve({port,args}); }); }\n");
   for (const file of REQUIRED_BUILD_FILES) put(path.join(dist, file), `// fixture ${file}\n`);
   fs.mkdirSync(resources, { recursive: true });
   await asar.createPackage(source, path.join(resources, 'app.asar'));

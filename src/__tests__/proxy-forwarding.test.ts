@@ -1,3 +1,8 @@
+import * as upstreamToolsModule from '../proxy/upstreamTools';
+import * as nativeTransportModule from '../proxy/nativeTransport';
+import * as localTranscriptionModule from '../proxy/localTranscription';
+import * as nativeVoiceModule from '../proxy/nativeVoice';
+import * as voiceTransportModule from '../proxy/voiceTransport';
 import * as googlePoolFailover from '../proxy/googlePoolFailover';
 import * as loopbackSecurity from '../proxy/loopbackSecurity';
 import * as subagentRoutingModule from '../proxy/subagentRouting';
@@ -95,6 +100,7 @@ async function fixture(
       },
     },
     './proxy/customRequest': customRequest,
+    './customNodes': { rememberNativeGeminiCatalog: () => {}, readRuntimeModelConfig: (...args: any[]) => (dependencies['./modelStore'] as any).readModelConfig?.(...args) || [] },
     './modelStore': { readModelConfig: () => models },
     './schemaValidator': { validateCustomModel: () => ({ valid: true }) },
     './cryptoStore': {
@@ -102,6 +108,11 @@ async function fixture(
       decryptString: (value: string) => value,
     },
     './proxy/loopbackSecurity': loopbackSecurity,
+    './proxy/upstreamTools': upstreamToolsModule,
+    './proxy/nativeTransport': nativeTransportModule,
+    './proxy/localTranscription': localTranscriptionModule,
+    './proxy/nativeVoice': nativeVoiceModule,
+    './proxy/voiceTransport': voiceTransportModule,
     './proxy/listen': {
       getRequiredProxyPort: () => undefined,
       listenProxy: (server: http.Server) => listenProxy(server, 0),

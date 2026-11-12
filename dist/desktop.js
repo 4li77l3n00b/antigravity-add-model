@@ -4,6 +4,8 @@ exports.install = install;
 /** Custom-model integration installed alongside the current vendor desktop runtime. */
 const electron_1 = require("electron");
 const customIpc_1 = require("./customIpc");
+const remoteAcpIpc_1 = require("./remoteAcpIpc");
+const localTranscription_1 = require("./proxy/localTranscription");
 const proxy_1 = require("./proxy");
 let installed = false;
 function install(getLanguageServerPort) {
@@ -12,6 +14,7 @@ function install(getLanguageServerPort) {
     installed = true;
     (0, proxy_1.setLanguageServerPortResolver)(getLanguageServerPort);
     (0, customIpc_1.registerCustomModelHandlers)();
+    (0, remoteAcpIpc_1.registerRemoteAcp)(getLanguageServerPort);
     // Registered before the vendor's ready callback, without replacing its startup,
     // updater, WSL integration, certificate policy, or window configuration.
     void electron_1.app.whenReady().then(() => {
@@ -26,7 +29,13 @@ function install(getLanguageServerPort) {
                 Number(url.port) !== lsPort) {
                 return callback({});
             }
-            if (/(?:\/|\.)LanguageServerService\/SetCloudCodeURL$/.test(url.pathname)) {
+            const localAudio = /^(?:\/exa\.language_server_pb\.LanguageServerService\/|\/LanguageServerService\/)([^/]+)$/.exec(url.pathname);
+            if (localAudio && localTranscription_1.LOCAL_AUDIO_METHODS.includes(localAudio[1]) && (0, proxy_1.isToolProxyConfigured)()) {
+                callback({
+                    redirectURL: `http://127.0.0.1:${proxyPort}${localTranscription_1.LOCAL_AUDIO_PATH}${localAudio[1]}`,
+                });
+            }
+            else if (/(?:\/|\.)LanguageServerService\/SetCloudCodeURL$/.test(url.pathname)) {
                 callback({ cancel: true });
             }
             else if (/(?:\/|\.)LanguageServerService\/GetAvailableModels$/.test(url.pathname)) {

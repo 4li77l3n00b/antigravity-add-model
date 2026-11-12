@@ -1,3 +1,4 @@
+import { CustomNodeStore } from './customNodes';
 import { ModelStore, ModelEntry, SecretCodec } from './modelStore';
 import { loginGoogleAccount, GoogleLoginOptions } from './googleOAuth';
 import { prepareGoogleAccount } from './googleOnboarding';
@@ -43,6 +44,7 @@ export declare function createModelManager(directory: string, codec: SecretCodec
     now: () => number;
 }>): {
     store: ModelStore;
+    nodes: CustomNodeStore;
     saveModel: (model: ModelEntry) => {
         success: boolean;
     };

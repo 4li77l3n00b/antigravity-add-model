@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/vahapogut/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/vahapogut/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="#安装指南"><img src="https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js 22.13 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-2563eb" alt="Apache License 2.0"></a>
 </p>
@@ -24,10 +24,23 @@
   <a href="#快速链接">快速链接</a> ·
   <a href="#界面截图">界面截图</a> ·
   <a href="#文档指南">文档指南</a> ·
-  <a href="https://github.com/vahapogut/antigravity-add-model/issues/new">提交问题 (Issue)</a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/issues/new">提交问题 (Issue)</a>
 </p>
 
 ---
+
+## 桌面与 SSH 扩展分支
+
+本仓库是 [vahapogut/antigravity-add-model](https://github.com/vahapogut/antigravity-add-model) 的 fork，在原项目基础上加入：
+
+- 先添加自定义端点，再发现模型、选择覆盖原有 Gemini 模型，或添加该端点的其他模型。
+- 按项目展示模型：本地项目使用本地可用模型，SSH 项目使用远端 Agent 实际公布的模型。
+- 在端点页面选择通过兼容的 TokenNest 端点代理上游工具及语音 API。
+- SSH 项目融入 Antigravity 原有项目与会话界面，支持远端历史、原生 Swarm 视图及经能力协商的永久删除；归档仍是本地列表状态。
+
+配套的 [ACP SSH 组件](acp-ssh/README.md) 提供远端宿主及 Antigravity 适配器。先在远端 Linux 主机安装，再从桌面项目入口选择 **New SSH Project**，填写 SSH 别名或 `user@host`、远端 `acp-ssh` 的绝对路径、实例名和工作目录。连接使用系统已有的 SSH 密钥与 `known_hosts`。
+
+独立桌面端集成已检查 **Antigravity 2.29.1**。永久删除要求远端明确公布相应能力；运行中或存在实际 Swarm／父子关联的会话会拒绝删除。本仓库包含插件源码和构建产物，不包含厂商应用或 CLI 二进制。安装前请阅读[兼容性说明](docs/compatibility.md)及 ACP SSH 指南。
 
 在 Antigravity 内置模型的基础上，无缝添加外部 API 服务商与本地模型。你可以在设置（Settings）中完成配置，直接在对话模型选择器中切换模型，还可以按需通过网关（Gateway）路由请求，从而获得请求历史记录、备用服务商回退（Fallback）以及可视化浏览器控制台等功能。
 
@@ -41,7 +54,7 @@
 | [安装指南](#安装指南) | [可选网关与 Web 控制台](#可选网关与-web-控制台) | [故障排查与恢复](#更新诊断与恢复) |
 | [添加你的第一个模型](#添加你的第一个模型) | [从另一台设备连接](#从另一台设备连接) | [受支持的应用版本与目录结构](docs/compatibility.md) |
 | [服务商与模型目录](docs/providers.md) | [模型详细配置](docs/configuration.md) | [更新日志 (Changelog)](CHANGELOG.md) |
-| [开发与贡献](#开发与贡献) | [Google 账号池设置](docs/configuration.md#google-cloud-code-account-pools) | [浏览现有 Issue](https://github.com/vahapogut/antigravity-add-model/issues) |
+| [开发与贡献](#开发与贡献) | [Google 账号池设置](docs/configuration.md#google-cloud-code-account-pools) | [浏览现有 Issue](https://github.com/4li77l3n00b/antigravity-add-model/issues) |
 | [Antigravity IDE 配置指南](docs/ide.md) | [基于源码的功能特性对比](docs/feature-parity.md) | [IDE 状态检查与还原](docs/ide.md#status-and-recovery) |
 
 ## 核心功能
@@ -120,7 +133,7 @@
 你需要安装**独立的 Antigravity 桌面端应用**、Git 以及 **Node.js 22.13 或更高版本**。该 Node 版本同时支持桌面端插件和可选网关。
 
 ```sh
-git clone https://github.com/vahapogut/antigravity-add-model.git
+git clone https://github.com/4li77l3n00b/antigravity-add-model.git
 cd antigravity-add-model
 npm ci --ignore-scripts
 npm run build
@@ -347,7 +360,7 @@ npm run test:integration
 
 CI 自动化测试基于本地模拟服务商数据（Fixtures）和隔离安装包在 Windows、macOS 和 Linux 三大平台上运行。CI 不会验证真实服务商的在线凭据，也无法预验证未来发布的每一个 Antigravity 新版本。
 
-如需新增服务商预设，请从[桌面端服务商预设目录](src/providers.ts)、[协议注册表](src/proxy/registry.ts)以及[网关服务商目录](gateway/src/provider-catalog.ts)入手。提交更改时请附带相应的单元测试并重新构建桌面端产物（`dist/`）。非常欢迎提交 Pull Request；如遇可复现的 Bug，请附带你的应用类型/版本号、操作系统及诊断信息[提交 Issue](https://github.com/vahapogut/antigravity-add-model/issues)。
+如需新增服务商预设，请从[桌面端服务商预设目录](src/providers.ts)、[协议注册表](src/proxy/registry.ts)以及[网关服务商目录](gateway/src/provider-catalog.ts)入手。提交更改时请附带相应的单元测试并重新构建桌面端产物（`dist/`）。非常欢迎提交 Pull Request；如遇可复现的 Bug，请附带你的应用类型/版本号、操作系统及诊断信息[提交 Issue](https://github.com/4li77l3n00b/antigravity-add-model/issues)。
 
 ## 开源许可与致谢
 

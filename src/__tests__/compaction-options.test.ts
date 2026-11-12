@@ -375,3 +375,11 @@ describe('compaction across real proxy transports', () => {
     expect(fallback.thinkingBudget).toBe(16000);
   });
 });
+
+describe('Gemini node thinking levels', () => {
+  it.each(['low', 'medium', 'high'] as const)('maps an explicit %s level for normal Gemini requests', effort => {
+    const config = model({ externalModelName: 'gemini-4-carbon', reasoningEffort: effort, thinkingBudget: undefined });
+    expect(applyRequestOptions({}, config, 'google', false).generationConfig).toMatchObject({ thinkingConfig: { thinkingLevel: effort.toUpperCase() } });
+    expect(applyRequestOptions({}, { ...config, thinkingBudget: 30000 }, 'google', false).generationConfig).toMatchObject({ thinkingConfig: { thinkingBudget: 30000 } });
+  });
+});

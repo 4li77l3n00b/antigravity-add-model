@@ -1,3 +1,4 @@
+import { readRuntimeModelConfig, rememberNativeGeminiCatalog } from './customNodes';
 /**
  * Antigravity Local Proxy Server.
  * Routes requests to Google, OpenAI, Anthropic, Ollama, and custom provider endpoints.
@@ -13,6 +14,10 @@ import log from 'electron-log';
 // ─── Types ────────────────────────────────────────────────────────────────
 
 export interface CustomModel {
+  nodeId?: string;
+  nodeToolSource?: boolean;
+  nativeOverrideId?: string;
+  nativeOverrideModel?: string | number;
   name: string;
   displayName: string;
   description: string;
@@ -48,6 +53,8 @@ export interface CustomModel {
   googleAccounts?: import('./googleAccounts').GoogleAccount[];
   googlePool?: import('./googleAccounts').GooglePoolOptions;
   encryptedGoogleAccounts?: boolean;
+  /** Use this saved TokenNest endpoint/key as the application-wide upstream tool source. */
+  toolProxy?: boolean;
 }
 
 interface GeminiRequestBody {
@@ -132,7 +139,7 @@ import {
 import { detectModelCapabilities, nativeCatalogCapabilities, nativeModelExperiments } from './proxy/modelUtils';
 import { CloudCodeRouting } from './proxy/cloudCodeRouting';
 import { catalogModelSlug, catalogDisplayNames, localModelSlug, mergeCloudCodeCatalog } from './proxy/modelCatalog';
-import { allocateModelIdentities, ModelIdentity } from './modelIdentity';
+import { allocateModelIdentities, placeholderIndex, ModelIdentity } from './modelIdentity';
 
 // Custom request transport and model storage
 import { runCustomModelRequest, getProxyMetrics, stopCustomRequests } from './proxy/customRequest';
@@ -143,6 +150,11 @@ import { resolveConfiguredSubagentModel } from './proxy/subagentModels';
 import { authenticatedGoogleFileUrl, guardLoopbackRequest, languageServerModelsUrl } from './proxy/loopbackSecurity';
 import { forwardNativeGeneration, NativeSubagentRouting } from './proxy/nativeSubagentResponse';
 import { attemptGooglePoolFailover, resolveGoogleFailoverPool } from './proxy/googlePoolFailover';
+import { routeUpstreamTools, routeTranscriptionStream, toolProxySource } from './proxy/upstreamTools';
+import { routeNativeVoice, stopNativeVoice } from './proxy/nativeVoice';
+import { startNativeTransport, stopNativeTransport } from './proxy/nativeTransport';
+import { startVoiceTransport, stopVoiceTransport } from './proxy/voiceTransport';
+import { routeLocalTranscription, stopLocalTranscription } from './proxy/localTranscription';
 
 let languageServerPortResolver: (() => number | undefined) | undefined;
 let languageServerRoutingEnabled = false;
@@ -174,10 +186,11 @@ function getCustomModelsPath(): string {
 }
 
 function modelIdentities(models: CustomModel[], upstream?: unknown): Map<string, ModelIdentity> {
+  models = models.filter((model) => !model.nodeToolSource && !model.nativeOverrideId);
   try {
     // Include disabled entries so toggling an effort variant cannot reassign another model's identity.
-    const saved = readModelConfig(getCustomModelsPath()).filter(
-      (model) => typeof model.name === 'string' && model.name,
+    const saved = readRuntimeModelConfig(getCustomModelsPath()).filter(
+      (model) => typeof model.name === 'string' && model.name && !model.nodeToolSource && !model.nativeOverrideId,
     );
     const configured = [...new Map([...saved, ...models].map((model) => [model.name, model])).values()];
     return new Map(
@@ -198,6 +211,27 @@ function modelIdentities(models: CustomModel[], upstream?: unknown): Map<string,
 }
 
 function matchCustomModel(models: CustomModel[], ...selectors: unknown[]): CustomModel | undefined {
+  models = models.filter((model) => !model.nodeToolSource);
+  const overrides = models.filter((model) => model.nativeOverrideId);
+  if (
+    overrides.some((model) =>
+      overrides.some((other) => other.name !== model.name && other.nativeOverrideId === model.nativeOverrideId),
+    )
+  )
+    throw new Error('Multiple enabled nodes override the same native Gemini model.');
+  for (const model of overrides)
+    if (
+      selectors.some(
+        (selector) =>
+          selector === model.nativeOverrideId ||
+          selector === `models/${model.nativeOverrideId}` ||
+          selector === model.nativeOverrideModel ||
+          (placeholderIndex(model.nativeOverrideModel) !== undefined &&
+            placeholderIndex(typeof selector === 'string' ? selector.replace(/^models\//, '') : selector) ===
+              placeholderIndex(model.nativeOverrideModel)),
+      )
+    )
+      return model;
   const identities = modelIdentities(models);
   // Named aliases remain available even when the finite native enum pool is exhausted.
   for (const selector of selectors) {
@@ -226,10 +260,11 @@ function matchCustomModel(models: CustomModel[], ...selectors: unknown[]): Custo
 }
 
 function customCloudCodeCatalog(upstream: unknown = {}): Record<string, unknown> {
-  const models = loadCustomModels();
+  rememberNativeGeminiCatalog(path.dirname(getCustomModelsPath()), upstream);
+  const models = loadCustomModels().filter((model) => !model.nodeToolSource);
   const identities = modelIdentities(models, upstream);
   const labels = catalogDisplayNames(models, upstream);
-  return mergeCloudCodeCatalog(
+  const catalog = mergeCloudCodeCatalog(
     upstream,
     models
       .filter((model) => identities.get(model.name)?.placeholderId)
@@ -270,6 +305,39 @@ function customCloudCodeCatalog(upstream: unknown = {}): Record<string, unknown>
         };
       }),
   );
+  for (const key of ['models', 'availableModels', 'available_models']) {
+    const collection = catalog[key] as Record<string, any> | any[] | undefined;
+    if (!collection || typeof collection !== 'object') continue;
+    for (const model of models.filter((entry) => entry.nativeOverrideId)) {
+      const id = String(model.nativeOverrideId);
+      const original = Array.isArray(collection)
+        ? collection.find((entry) => entry.name?.replace(/^models\//, '') === id || entry.id === id)
+        : collection[id];
+      if (!original) continue;
+      Object.assign(original, {
+        ...getAdvertisedModelCapabilities(model),
+        maxTokens: nativeCatalogCapabilities(model).maxTokens,
+        maxOutputTokens: detectModelCapabilities(model).maxOutputTokens,
+        ...(Array.isArray(collection)
+          ? {
+              inputTokenLimit: nativeCatalogCapabilities(model).maxTokens,
+              outputTokenLimit: detectModelCapabilities(model).maxOutputTokens,
+            }
+          : {}),
+        recommended: true,
+        ...(nativeModelExperiments(model) ? { modelExperiments: nativeModelExperiments(model) } : {}),
+      });
+    }
+  }
+  if (isToolProxyConfigured()) {
+    // Full voice uses StreamVoice's own ASR. Prevent the LS from opening an
+    // independent hardcoded aicode connection with the desktop Google login.
+    // Protobuf JSON accepts both names for this field, but rejects them
+    // together during account initialization. Emit only its canonical JSON name.
+    delete catalog.audio_transcription_model_ids;
+    catalog.audioTranscriptionModelIds = [];
+  }
+  return catalog;
 }
 
 function getAdvertisedModelCapabilities(model: CustomModel) {
@@ -309,7 +377,7 @@ function getAdvertisedModelCapabilities(model: CustomModel) {
 
 // ─── Model Loading ────────────────────────────────────────────────────────
 
-export function loadCustomModels(): CustomModel[] {
+export function loadCustomModels(includeDisabled = false): CustomModel[] {
   const filePath = getCustomModelsPath();
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const { validateCustomModel } = require('./schemaValidator');
@@ -359,7 +427,7 @@ export function loadCustomModels(): CustomModel[] {
   }
 
   try {
-    const models = readModelConfig(filePath) as CustomModel[];
+    const models = readRuntimeModelConfig(filePath) as CustomModel[];
 
     // Auto-migration check
     const unprotected = (value: unknown) =>
@@ -376,7 +444,7 @@ export function loadCustomModels(): CustomModel[] {
     if (needsMigration) {
       log.info('[Proxy] Plaintext custom_models.json detected. Migrating to encrypted format...');
       cryptoStore.backupFile(filePath);
-      const encryptedModels = cryptoStore.encryptModels(models);
+      const encryptedModels = cryptoStore.encryptModels(readModelConfig(filePath) as CustomModel[]);
       for (const model of encryptedModels) {
         if (model.customHeaders && !model.encryptedHeaders) {
           model.customHeaders = Object.fromEntries(
@@ -449,7 +517,7 @@ export function loadCustomModels(): CustomModel[] {
     for (let i = 0; i < decrypted.length; i++) {
       const validation = validateCustomModel(decrypted[i]) as { valid: boolean; error?: string };
       if (validation.valid) {
-        if (decrypted[i].enabled !== false) validModels.push(decrypted[i]);
+        if (includeDisabled || decrypted[i].enabled !== false) validModels.push(decrypted[i]);
       } else {
         log.warn(`[Proxy] Skipping invalid model at index ${i}: ${validation.error}`);
       }
@@ -1029,7 +1097,7 @@ function handleGetAvailableModelsProxy(res: http.ServerResponse, reqBody: Buffer
     lsRes.on('data', (chunk: Buffer) => chunks.push(chunk));
     lsRes.on('end', () => {
       const responseBuf = Buffer.concat(chunks);
-      const customModels = loadCustomModels();
+      const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
       const identities = modelIdentities(customModels);
       let modifiedBuf = responseBuf;
 
@@ -1160,8 +1228,20 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
     return;
   }
 
+  const getToolSource = () => {
+    const saved = readRuntimeModelConfig(getCustomModelsPath()).filter((model) => model.toolProxy === true);
+    if (!saved.length) return undefined;
+    const models = loadCustomModels(true);
+    if (saved.length !== 1 || !models.some((model) => model.name === saved[0].name))
+      throw new Error('Saved tool proxy source is invalid.');
+    return toolProxySource(models);
+  };
+  if (routeNativeVoice(req, res, getToolSource)) return;
+  if (routeLocalTranscription(req, res, getToolSource)) return;
+  if (routeTranscriptionStream(req, res, getToolSource)) return;
+
   // P0-4: Enforce maximum request body size to prevent memory exhaustion DoS
-  const MAX_BODY_SIZE = 10 * 1024 * 1024; // 10 MB
+  const MAX_BODY_SIZE = 16 * 1024 * 1024;
   let bodyLength = 0;
   let bodyRejected = false;
 
@@ -1189,6 +1269,8 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
 
     const fullBody = Buffer.concat(bodyChunks);
     const bodyStr = fullBody.toString('utf-8');
+
+    if (routeUpstreamTools(req, res, fullBody, getToolSource)) return;
 
     log.info(`[Proxy] Request: ${req.method} ${req.url}`);
 
@@ -1291,7 +1373,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
           log.error('[Proxy] Models list forward request timed out');
           googleReq.destroy();
           if (!res.headersSent) {
-            const customModels = loadCustomModels();
+            const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
             res.writeHead(200, { 'Content-Type': 'application/json' });
             res.end(
               JSON.stringify({
@@ -1312,7 +1394,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
         googleRes.on('end', () => {
           try {
             const googleJson = JSON.parse(googleBody) as { models?: unknown[] };
-            const customModels = loadCustomModels();
+            const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
 
             const mappedCustom = customModels.map((m) => ({
               name: m.name,
@@ -1338,7 +1420,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
             res.end(JSON.stringify(googleJson));
           } catch (err) {
             log.error('[Proxy] Google list models failed, returning custom models list only:', err);
-            const customModels = loadCustomModels();
+            const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
             const mappedCustom = customModels.map((m) => ({
               name: m.name,
               version: '1.0',
@@ -1358,7 +1440,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
       googleReq.on('error', (err) => {
         if (stoppingProxy || res.destroyed || res.writableEnded || res.socket?.destroyed) return;
         log.error('[Proxy] Google models list request error:', err);
-        const customModels = loadCustomModels();
+        const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
         res.writeHead(200, { 'Content-Type': 'application/json' });
         res.end(
           JSON.stringify({
@@ -1389,7 +1471,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
           `[Proxy] Cloud Code generation request model: ${modelName}, modelId: ${modelId}, url: ${req.url}, bodyKeys: ${Object.keys(reqJson).join(',')}`,
         );
         {
-          const customModels = loadCustomModels();
+          const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
           const actualGeminiBody = { ...((reqJson.request || reqJson) as GeminiRequestBody) };
           if (typeof reqJson.sessionId === 'string') actualGeminiBody.sessionId = reqJson.sessionId;
           if (typeof reqJson.conversationId === 'string') actualGeminiBody.conversationId = reqJson.conversationId;
@@ -1467,7 +1549,7 @@ function handleRequest(req: http.IncomingMessage, res: http.ServerResponse): voi
         res.end(JSON.stringify({ error: { message: 'Invalid model URL encoding' } }));
         return;
       }
-      const customModels = loadCustomModels();
+      const customModels = loadCustomModels().filter((model) => !model.nodeToolSource);
       try {
         const geminiBody = JSON.parse(bodyStr) as GeminiRequestBody;
         const prepared = subagentRouting.prepareRequest(
@@ -1583,6 +1665,12 @@ export function stopProxy(): Promise<void> {
       }
     }
     stopCleanupInterval();
+    stopLocalTranscription();
+    stopNativeVoice();
+    const voiceShutdown = stopVoiceTransport();
+    if (voiceShutdown) await voiceShutdown;
+    const nativeShutdown = stopNativeTransport();
+    if (nativeShutdown) await nativeShutdown;
     stopCustomRequests();
     cloudCodeRouting?.clear();
     if (server) {
@@ -1617,4 +1705,22 @@ export function stopProxy(): Promise<void> {
 
 export function getProxyPort(): number {
   return proxyPort;
+}
+
+/** Native gRPC requires HTTP/2; Electron's catalogue redirect keeps its HTTP/1 listener. */
+export async function startApiServerProxy(): Promise<number> {
+  return startNativeTransport(await startProxy());
+}
+
+export async function startVoiceServerProxy(): Promise<number> {
+  return startVoiceTransport(await startProxy());
+}
+
+/** A configured but invalid source must fail locally, rather than fall back to Google dictation. */
+export function isToolProxyConfigured(): boolean {
+  try {
+    return readRuntimeModelConfig(getCustomModelsPath()).some((model) => model.toolProxy === true);
+  } catch {
+    return true;
+  }
 }

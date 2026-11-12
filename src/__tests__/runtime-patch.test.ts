@@ -20,7 +20,8 @@ function startLanguageServer(port, csrf, options = {}) {
     if (hostBridgeUrl && hostBridgeToken) args.push('--host_bridge_url=' + hostBridgeUrl, '--host_bridge_token=' + hostBridgeToken);
     if (headless) args.push('--headless');
     if (wsl) args.push('--wsl-distro=' + wsl.distro, '--exit_on_stdin_close');
-    resolve({ args, wsl });
+    const env = { AICODE_ENDPOINT_URL: 'https://original.example' };
+    resolve({ args, wsl, env });
   });
 }
 exports.setupLocalCertTrust = () => 'vendor certificate policy';
@@ -43,7 +44,11 @@ const storageAPI = { getCustomModels: () => electron_1.ipcRenderer.invoke('model
 window.addEventListener('DOMContentLoaded', () => storageAPI.getCustomModels());
 `;
 
-function fixture(overrides: Record<string, string> = {}, build = customPreload, contextBuild = '// context preload fixture') {
+function fixture(
+  overrides: Record<string, string> = {},
+  build = customPreload,
+  contextBuild = '// context preload fixture',
+) {
   const files: Record<string, string> = {
     'dist/main.js': vendorMain,
     'dist/languageServer.js': vendorServer,
@@ -52,8 +57,8 @@ function fixture(overrides: Record<string, string> = {}, build = customPreload, 
   };
   const readVendor = vi.fn((name: string) => Buffer.from(files[name]));
   const readBuild = vi.fn((name: string) => {
-    expect(['customPreload.js', 'contextUsagePreload.js']).toContain(name);
-    return Buffer.from(name === 'customPreload.js' ? build : contextBuild);
+    expect(['customPreload.js', 'contextUsagePreload.js', 'nativeRemotePreload.js']).toContain(name);
+    return Buffer.from(name === 'customPreload.js' ? build : name === 'contextUsagePreload.js' ? contextBuild : '// native bridge fixture');
   });
   const plan = () => planRuntimePatch(readVendor, readBuild) as Map<string, Buffer>;
   return { files, readVendor, readBuild, plan };
@@ -61,18 +66,23 @@ function fixture(overrides: Record<string, string> = {}, build = customPreload, 
 
 function serverFixture(source = vendorServer) {
   const patched = fixture({ 'dist/languageServer.js': source }).plan().get('dist/languageServer.js')!.toString();
-  const exports: Record<string, (...args: unknown[]) => Promise<{ args: string[]; wsl?: unknown }>> = {};
+  const exports: Record<
+    string,
+    (...args: unknown[]) => Promise<{ args: string[]; wsl?: unknown; env: Record<string, string> }>
+  > = {};
   const record = vi.fn();
   const startProxy = vi.fn().mockResolvedValue(61001);
+  const startApiServerProxy = vi.fn().mockResolvedValue(61002);
+  const startVoiceServerProxy = vi.fn().mockResolvedValue(61003);
   runInNewContext(patched, {
     exports,
     record,
     require: (name: string) => {
       expect(name).toBe('./modelPatch/proxy');
-      return { startProxy };
+      return { startProxy, startApiServerProxy, startVoiceServerProxy };
     },
   });
-  return { exports, record, startProxy };
+  return { exports, record, startProxy, startApiServerProxy, startVoiceServerProxy };
 }
 
 describe('vendor runtime adapter', () => {
@@ -127,10 +137,14 @@ describe('vendor runtime adapter', () => {
     });
     expect(f.record).not.toHaveBeenCalled();
     resolvePort!(61005);
-    const { args } = await pending;
-    for (const flag of ['--api_server_url', '--cloud_code_endpoint', '--inference_api_server_url']) {
+    const { args, env } = await pending;
+    expect(env.AICODE_ENDPOINT_URL).toBe('https://localhost:61003');
+    for (const flag of ['--cloud_code_endpoint', '--inference_api_server_url']) {
       expect(args[args.indexOf(flag) + 1]).toBe('http://localhost:61005');
     }
+    expect(args[args.indexOf('--api_server_url') + 1]).toBe('http://localhost:61002');
+    expect(f.startApiServerProxy).toHaveBeenCalledOnce();
+    expect(f.startVoiceServerProxy).toHaveBeenCalledOnce();
     expect(args).toContain('--host_bridge_url=http://localhost:62000');
     expect(args).toContain('--host_bridge_token=bridge-token');
     expect(args).toContain('--headless');
@@ -141,7 +155,10 @@ describe('vendor runtime adapter', () => {
     const wsl = { distro: 'Ubuntu', binaryPath: '/opt/vendor/language_server' };
     const result = await f.exports.startLanguageServer(60123, 'csrf', { wsl });
     expect(f.startProxy).not.toHaveBeenCalled();
+    expect(f.startApiServerProxy).not.toHaveBeenCalled();
     expect(result.wsl).toBe(wsl);
+    expect(result.env.AICODE_ENDPOINT_URL).toBe('https://original.example');
+    expect(f.startVoiceServerProxy).not.toHaveBeenCalled();
     expect(result.args[result.args.indexOf('--api_server_url') + 1]).toBe('https://generativelanguage.googleapis.com');
     expect(result.args[result.args.indexOf('--cloud_code_endpoint') + 1]).toBe(
       'https://daily-cloudcode-pa.googleapis.com',
@@ -183,7 +200,7 @@ describe('vendor runtime adapter', () => {
     const { args } = await f.exports.startLanguageServer(0, 'csrf', true);
     expect(f.startProxy).toHaveBeenCalledOnce();
     expect(args).toContain('--headless');
-    expect(args[args.indexOf('--api_server_url') + 1]).toBe('http://localhost:61001');
+    expect(args[args.indexOf('--api_server_url') + 1]).toBe('http://localhost:61002');
   });
 
   it('preserves all vendor bridges and appends an isolated sandbox-compatible preload', () => {
@@ -260,8 +277,8 @@ describe('vendor runtime adapter', () => {
       'later endpoint override',
       'dist/languageServer.js',
       vendorServer.replace(
-        'resolve({ args, wsl });',
-        "args.push('--api_server_url', 'https://later.example'); resolve({ args, wsl });",
+        'resolve({ args, wsl, env });',
+        "args.push('--api_server_url', 'https://later.example'); resolve({ args, wsl, env });",
       ),
     ],
     ['spread args', 'dist/languageServer.js', vendorServer.replace("'--standalone'", '...otherArgs')],

@@ -1,3 +1,4 @@
+import { CustomNodeStore } from './customNodes';
 import * as http from 'node:http';
 import * as https from 'node:https';
 import * as fs from 'node:fs';
@@ -11,7 +12,14 @@ import {
   writeJsonAtomic,
   redactModel,
 } from './modelStore';
-import { PROVIDERS, getProvider, resolveApiFormat, workersAiAccountPath, isOpencodeEndpoint, OPENCODE_USER_AGENT } from './providers';
+import {
+  PROVIDERS,
+  getProvider,
+  resolveApiFormat,
+  workersAiAccountPath,
+  isOpencodeEndpoint,
+  OPENCODE_USER_AGENT,
+} from './providers';
 import { loginGoogleAccount, GoogleLoginOptions } from './googleOAuth';
 import { prepareGoogleAccount } from './googleOnboarding';
 import { runGenerationProbe } from './generationProbe';
@@ -302,6 +310,7 @@ export function createModelManager(
     const account = pendingAccount(id);
     return account ? { ...account } : undefined;
   });
+  const nodes = new CustomNodeStore(directory, codec, store);
   function persistGoogleAccount(
     modelName: string,
     account: GoogleAccount,
@@ -360,13 +369,23 @@ export function createModelManager(
     const previous = store.read().find((saved) => saved.name === (model.originalName || model.name));
     store.save(model);
     const current = store.read().find((saved) => saved.name === model.name);
-    for (const account of Array.isArray(current?.googleAccounts) ? current.googleAccounts as GoogleAccount[] : []) {
-      const old = (Array.isArray(previous?.googleAccounts) ? previous.googleAccounts as GoogleAccount[] : []).find((value) => value.id === account.id);
+    for (const account of Array.isArray(current?.googleAccounts) ? (current.googleAccounts as GoogleAccount[]) : []) {
+      const old = (Array.isArray(previous?.googleAccounts) ? (previous.googleAccounts as GoogleAccount[]) : []).find(
+        (value) => value.id === account.id,
+      );
       if (!old) continue;
-      const secretChanged = (['accessToken', 'refreshToken', 'clientSecret'] as const).some((field) =>
-        (current?.encryptedGoogleAccounts ? decodeSecret(account[field], codec) : account[field] || '') !==
-        (previous?.encryptedGoogleAccounts ? decodeSecret(old[field], codec) : old[field] || ''));
-      if (secretChanged || (['clientId', 'project', 'authMode', 'cloudCodeEndpoint'] as const).some((field) => old[field] !== account[field])) resetGoogleAccountState(account.id);
+      const secretChanged = (['accessToken', 'refreshToken', 'clientSecret'] as const).some(
+        (field) =>
+          (current?.encryptedGoogleAccounts ? decodeSecret(account[field], codec) : account[field] || '') !==
+          (previous?.encryptedGoogleAccounts ? decodeSecret(old[field], codec) : old[field] || ''),
+      );
+      if (
+        secretChanged ||
+        (['clientId', 'project', 'authMode', 'cloudCodeEndpoint'] as const).some(
+          (field) => old[field] !== account[field],
+        )
+      )
+        resetGoogleAccountState(account.id);
     }
     return { success: true };
   }
@@ -447,7 +466,9 @@ export function createModelManager(
     return connection;
   }
   function resolveProbe(input: ProbeParams): ProbeParams {
-    const stored = input.name ? store.read().find((model) => model.name === input.name) : undefined;
+    const stored = input.name
+      ? [...store.read(), ...nodes.store.read()].find((model) => model.name === input.name)
+      : undefined;
     const model = { ...(stored || {}), ...input } as ProbeParams;
     if (
       stored &&
@@ -607,6 +628,7 @@ export function createModelManager(
   }
   return {
     store,
+    nodes,
     saveModel,
     presets: () => PROVIDERS,
     discoverModels,
@@ -685,10 +707,13 @@ export function createModelManager(
       const changed: ModelEntry[] = [];
       const resetIds = [account.id];
       for (const model of googleModels().filter((model) => model.name === input.modelName)) {
-        const accounts = Array.isArray(model.googleAccounts) ? model.googleAccounts as GoogleAccount[] : [];
-        const index = accounts.findIndex((existing) => input.replaceAccountId
-          ? existing.id === input.replaceAccountId
-          : existing.id === account.id || (!!account.email && existing.email?.toLowerCase() === account.email.toLowerCase()));
+        const accounts = Array.isArray(model.googleAccounts) ? (model.googleAccounts as GoogleAccount[]) : [];
+        const index = accounts.findIndex((existing) =>
+          input.replaceAccountId
+            ? existing.id === input.replaceAccountId
+            : existing.id === account.id ||
+              (!!account.email && existing.email?.toLowerCase() === account.email.toLowerCase()),
+        );
         if (input.replaceAccountId && index < 0) continue;
         if (index >= 0) {
           const previous = accounts[index];
@@ -696,7 +721,14 @@ export function createModelManager(
             throw new Error('The signed-in email does not match this account. Add it as a separate account instead.');
           // The renderer receives masked secrets. Resolve the fresh credentials
           // using the pending login ID before preserving the saved account ID.
-          accounts[index] = { ...account, refreshToken: account.refreshToken || '', clientSecret: account.clientSecret || '', id: previous.id, label: previous.label || account.label, enabled: previous.enabled };
+          accounts[index] = {
+            ...account,
+            refreshToken: account.refreshToken || '',
+            clientSecret: account.clientSecret || '',
+            id: previous.id,
+            label: previous.label || account.label,
+            enabled: previous.enabled,
+          };
           resetIds.push(previous.id);
         } else accounts.push({ ...account, enabled: true });
         changed.push({ ...model, googleAccounts: accounts });
@@ -704,11 +736,17 @@ export function createModelManager(
       return updateGoogleModels(changed, resetIds);
     },
     googleSelectAccount(input: { modelName: string; accountId?: string }) {
-      const changed = googleModels().filter((model) => model.name === input.modelName && Array.isArray(model.googleAccounts) &&
-        (input.accountId === undefined ||
-          (model.googleAccounts as GoogleAccount[]).some((account) => account.id === input.accountId && account.enabled !== false)));
+      const changed = googleModels().filter(
+        (model) =>
+          model.name === input.modelName &&
+          Array.isArray(model.googleAccounts) &&
+          (input.accountId === undefined ||
+            (model.googleAccounts as GoogleAccount[]).some(
+              (account) => account.id === input.accountId && account.enabled !== false,
+            )),
+      );
       for (const model of changed) {
-        const pool = { ...(model.googlePool as GooglePoolOptions || {}) };
+        const pool = { ...((model.googlePool as GooglePoolOptions) || {}) };
         if (input.accountId === undefined) delete pool.preferredAccountId;
         else pool.preferredAccountId = input.accountId;
         model.googlePool = pool;
@@ -719,15 +757,29 @@ export function createModelManager(
       const changed: ModelEntry[] = [];
       for (const model of googleModels()) {
         if (model.name !== input.modelName) continue;
-        if (!Array.isArray(model.googleAccounts) || !(model.googleAccounts as GoogleAccount[]).some((account) => account.id === input.accountId)) continue;
+        if (
+          !Array.isArray(model.googleAccounts) ||
+          !(model.googleAccounts as GoogleAccount[]).some((account) => account.id === input.accountId)
+        )
+          continue;
         const accounts = (model.googleAccounts as GoogleAccount[]).filter((account) => account.id !== input.accountId);
-        const pool = { ...(model.googlePool as GooglePoolOptions || {}) };
+        const pool = { ...((model.googlePool as GooglePoolOptions) || {}) };
         if (pool.preferredAccountId === input.accountId) delete pool.preferredAccountId;
-        changed.push({ ...model, googleAccounts: accounts, googlePool: pool,
-          ...(!accounts.some((account) => account.enabled !== false) ? { enabled: false } : {}) });
+        changed.push({
+          ...model,
+          googleAccounts: accounts,
+          googlePool: pool,
+          ...(!accounts.some((account) => account.enabled !== false) ? { enabled: false } : {}),
+        });
       }
       const result = updateGoogleModels(changed, []);
-      if (!googleModels().some((model) => Array.isArray(model.googleAccounts) && (model.googleAccounts as GoogleAccount[]).some((account) => account.id === input.accountId))) {
+      if (
+        !googleModels().some(
+          (model) =>
+            Array.isArray(model.googleAccounts) &&
+            (model.googleAccounts as GoogleAccount[]).some((account) => account.id === input.accountId),
+        )
+      ) {
         resetGoogleAccountState(input.accountId);
         pending.delete(input.accountId);
       }

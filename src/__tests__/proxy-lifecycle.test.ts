@@ -1,3 +1,8 @@
+import * as upstreamToolsModule from '../proxy/upstreamTools';
+import * as nativeTransportModule from '../proxy/nativeTransport';
+import * as localTranscriptionModule from '../proxy/localTranscription';
+import * as nativeVoiceModule from '../proxy/nativeVoice';
+import * as voiceTransportModule from '../proxy/voiceTransport';
 import * as googlePoolFailover from '../proxy/googlePoolFailover';
 import * as loopbackSecurity from '../proxy/loopbackSecurity';
 import * as subagentRoutingModule from '../proxy/subagentRouting';
@@ -94,10 +99,16 @@ function fixture(fixed = true) {
     './proxy/cloudCodeRouting': {},
     './modelIdentity': {},
     './proxy/customRequest': { stopCustomRequests: vi.fn(), getProxyMetrics: () => ({ requests: 0 }) },
+    './customNodes': { rememberNativeGeminiCatalog: () => {}, readRuntimeModelConfig: (...args: any[]) => (dependencies['./modelStore'] as any).readModelConfig?.(...args) || [] },
     './modelStore': {},
     './cryptoStore': {},
     // These are the production marker parser and listener, with only the socket mocked.
     './proxy/loopbackSecurity': loopbackSecurity,
+    './proxy/upstreamTools': upstreamToolsModule,
+    './proxy/nativeTransport': nativeTransportModule,
+    './proxy/localTranscription': localTranscriptionModule,
+    './proxy/nativeVoice': nativeVoiceModule,
+    './proxy/voiceTransport': voiceTransportModule,
     './proxy/listen': { getRequiredProxyPort, listenProxy },
   };
   const module = { exports: {} as ProxyModule };

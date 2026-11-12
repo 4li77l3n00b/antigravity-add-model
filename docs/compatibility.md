@@ -35,6 +35,38 @@ every future Antigravity release. CI uses controlled Electron mocks and syntheti
 ASAR packages; it does not log in to Google. CI includes macOS for filesystem
 behavior, not proof of macOS IDE model generation, signing, or UI support.
 
+## TokenNest upstream tools
+
+On a saved custom node, enable **Proxy upstream tool APIs through this node**.
+Legacy standalone model entries retain **Upstream tools (TokenNest)** → **Use
+this endpoint and API key**. Exactly one saved connection supplies the
+application-wide tool endpoint and API key, independently of the conversation
+model or its OpenAI/Gemini format. Disable the previous source before selecting
+another node; duplicating a model does not move this role. The TokenNest server
+must provide its Antigravity tool routes, an enabled Google subscription tool
+channel and API-key/group permissions for the required `antigravity-*` tool identities.
+Administrators configure upstream models and prices on the server.
+
+The desktop routes search, citation redirects, cached page reading, embeddings,
+image generation, transcription and code scoring through those managed routes.
+Native unary RPCs support h2c gRPC, binary gRPC-Web and HTTP/1 Connect protobuf;
+isolated Gemini search/image jobs are adapted to the same tool API. Missing
+upstream methods remain errors rather than fabricated successes. Login, quota,
+account management, telemetry, sandbox and enterprise APIs retain their native
+routes. WSL sessions retain the existing limitation described below.
+
+The source reuses encrypted credential storage and requires verified HTTPS,
+except loopback HTTP for local testing. Incoming Google OAuth, cookies, project
+metadata and legacy account metadata are excluded from requests to the site.
+A disabled or invalid configured source fails closed; rejected requests are not
+retried against Google. With no configured tool source the existing route remains.
+A buffered unary result also carries `X-TokenNest-Grpc-Status`; the desktop restores
+gRPC trailers from it when a reverse proxy drops trailing headers.
+Transport and credential-isolation regression tests cover these controls, following
+OWASP's [Authentication](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html)
+and [Session Management](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)
+guidance; these checks are not a complete ASVS compliance assessment.
+
 ## Black screen after an update
 
 [Issue #1](https://github.com/vahapogut/antigravity-add-model/issues/1) reports
@@ -112,6 +144,9 @@ bash deploy_linux.sh --resources /opt/antigravity/resources
 `--resources` accepts a Resources directory, an installation root, or a macOS
 `.app` directory. `--check` performs preflight only. Reopen the application
 manually after a successful deployment.
+
+Linux discovery includes both `/opt/antigravity/resources` and
+`/opt/Antigravity/resources`; directory names are case-sensitive.
 
 The installer keeps version/fingerprint-specific restore data in
 `Resources/.antigravity-model-patch`. To undo its last deployment:

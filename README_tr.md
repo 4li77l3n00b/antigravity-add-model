@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/vahapogut/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/vahapogut/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js 22.13 veya üzeri"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-2563eb" alt="Apache Lisansı 2.0"></a>
 </p>
@@ -24,7 +24,7 @@
   <a href="#quick-links">Hızlı bağlantılar</a> ·
   <a href="#screenshots">Ekran görüntüleri</a> ·
   <a href="#documentation">Dokümantasyon</a> ·
-  <a href="https://github.com/vahapogut/antigravity-add-model/issues/new">Sorun bildir</a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/issues/new">Sorun bildir</a>
 </p>
 
 ---
@@ -45,7 +45,7 @@ Bu belge Türkçedir. Bağlantı verilen ayrıntılı teknik rehberler İngilizc
 | [Kurulum](#installation) | [Ağ geçidi ve web paneli](#optional-gateway-and-web-dashboard) | [Sorun giderme ve kurtarma](#updates-diagnostics-and-recovery) |
 | [İlk modelini ekle](#add-your-first-model) | [Başka bir bilgisayardan bağlan](#connect-from-another-computer) | [Desteklenen sürümler ve kurulum yapıları](docs/compatibility.md) |
 | [Sağlayıcılar ve model katalogları](docs/providers.md) | [Model yapılandırması](docs/configuration.md) | [Değişiklik günlüğü](CHANGELOG.md) |
-| [Geliştirme ve katkı](#development-and-contributing) | [Google hesap kurulumu](docs/configuration.md#google-cloud-code-account-pools) | [Açılmış sorunlar](https://github.com/vahapogut/antigravity-add-model/issues) |
+| [Geliştirme ve katkı](#development-and-contributing) | [Google hesap kurulumu](docs/configuration.md#google-cloud-code-account-pools) | [Açılmış sorunlar](https://github.com/4li77l3n00b/antigravity-add-model/issues) |
 | [Antigravity IDE kurulumu](docs/ide.md) | [Kaynak koda dayalı özellik karşılaştırması](docs/feature-parity.md) | [IDE durumu ve geri yükleme](docs/ide.md#status-and-recovery) |
 | [Cloudflare kurulum sihirbazı](docs/workers-ai-setup.md) | [Yedek model zincirleri](docs/providers.md#fallback-chains-for-rate-limited-providers) | [Yerel proxy güvenliği](docs/compatibility.md#local-proxy-trust-boundary) |
 
@@ -141,7 +141,7 @@ Ağ geçidi bağlantısını kaydet, model takma adlarını içe aktar ve yönet
 **Bağımsız Antigravity masaüstü uygulaması**, Git ve **Node.js 22.13 veya üzeri** gerekir. Bu Node sürümü hem masaüstü eklentisini hem isteğe bağlı ağ geçidini destekler.
 
 ```sh
-git clone https://github.com/vahapogut/antigravity-add-model.git
+git clone https://github.com/4li77l3n00b/antigravity-add-model.git
 cd antigravity-add-model
 npm ci --ignore-scripts
 npm run build
@@ -391,7 +391,7 @@ npm run test:integration
 
 CI; yerel test sağlayıcıları ve ayrı kurulum paketleri kullanarak Windows, macOS ve Linux üzerinde çalışır. Gerçek sağlayıcı kimlik bilgilerini veya gelecekteki tüm Antigravity sürümlerini doğrulamaz.
 
-Yeni bir sağlayıcı eklemek için [masaüstü sağlayıcı kataloğundan](src/providers.ts), [protokol kaydından](src/proxy/registry.ts) ve [ağ geçidi sağlayıcı kataloğundan](gateway/src/provider-catalog.ts) başla. Değişiklikler ilgili testleri ve yeniden derlenmiş masaüstü çıktısını içermelidir. Pull request gönderebilirsin; tekrarlanabilir hatalar için uygulama türünü/sürümünü, işletim sistemini ve tanılama bilgilerini ekleyerek [issue aç](https://github.com/vahapogut/antigravity-add-model/issues).
+Yeni bir sağlayıcı eklemek için [masaüstü sağlayıcı kataloğundan](src/providers.ts), [protokol kaydından](src/proxy/registry.ts) ve [ağ geçidi sağlayıcı kataloğundan](gateway/src/provider-catalog.ts) başla. Değişiklikler ilgili testleri ve yeniden derlenmiş masaüstü çıktısını içermelidir. Pull request gönderebilirsin; tekrarlanabilir hatalar için uygulama türünü/sürümünü, işletim sistemini ve tanılama bilgilerini ekleyerek [issue aç](https://github.com/4li77l3n00b/antigravity-add-model/issues).
 
 <a id="license-and-credits"></a>
 

@@ -4,6 +4,8 @@ import ts from 'typescript';
 
 const MARKER = '/* antigravity-model-patch: vendor-runtime-v1 */';
 const LOCAL_URL = '__antigravityModelPatchUrl';
+const API_URL = '__antigravityModelPatchApiUrl';
+const VOICE_URL = '__antigravityModelPatchVoiceUrl';
 
 function unsupported(file, reason) {
   const error = new Error(
@@ -144,7 +146,7 @@ function patchLanguageServer(bytes) {
     options.initializer.properties.length === 0;
   const legacyHeadless = options.name.text === 'headless' && !options.initializer;
   if (!hasOptions && !legacyHeadless) unsupported(file, 'expected options = {} or legacy headless parameter');
-  if (matching(tree, (node) => ts.isIdentifier(node) && node.text === LOCAL_URL).length) {
+  if (matching(tree, (node) => ts.isIdentifier(node) && [LOCAL_URL, API_URL, VOICE_URL].includes(node.text)).length) {
     unsupported(file, `reserved identifier ${LOCAL_URL} already exists`);
   }
   const args = one(
@@ -180,7 +182,24 @@ function patchLanguageServer(bytes) {
   }
   const elements = args.initializer.elements;
   if (elements.some(ts.isSpreadElement)) unsupported(file, 'spread arguments are not a recognized startup layout');
-  const edits = [];
+  const env = one(
+    file,
+    matching(
+      fn.body,
+      (node) => ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) && node.name.text === 'env',
+    ),
+    'language-server environment',
+  );
+  if (
+    !env.initializer ||
+    !ts.isObjectLiteralExpression(env.initializer) ||
+    !ts.isVariableStatement(env.parent.parent)
+  ) {
+    unsupported(file, 'language-server env must be a literal object');
+  }
+  const edits = [
+    { start: env.parent.parent.end, text: `\n        if (${VOICE_URL}) env['AICODE_ENDPOINT_URL'] = ${VOICE_URL};` },
+  ];
   for (const flag of ['--api_server_url', '--cloud_code_endpoint']) {
     const entry = one(
       file,
@@ -192,7 +211,11 @@ function patchLanguageServer(bytes) {
     if (!value || !ts.isStringLiteral(value) || !value.text.startsWith('https://')) {
       unsupported(file, `${flag} must have a literal HTTPS vendor endpoint`);
     }
-    edits.push({ start: value.getStart(tree), end: value.end, text: `(${LOCAL_URL} || ${value.getText(tree)})` });
+    edits.push({
+      start: value.getStart(tree),
+      end: value.end,
+      text: `(${flag === '--api_server_url' ? API_URL : LOCAL_URL} || ${value.getText(tree)})`,
+    });
   }
   const inference = matching(fn.body, (node) => ts.isStringLiteral(node) && node.text === '--inference_api_server_url');
   if (inference.length) {
@@ -216,7 +239,9 @@ function patchLanguageServer(bytes) {
     start: fn.body.getStart(tree) + 1,
     text:
       `\n    ${MARKER}\n    const ${LOCAL_URL} = ${hasOptions ? 'options.wsl ? undefined : ' : ''}` +
-      `'http://localhost:' + await require('./modelPatch/proxy').startProxy();\n`,
+      `'http://localhost:' + await require('./modelPatch/proxy').startProxy();\n` +
+      `    const ${API_URL} = ${hasOptions ? 'options.wsl ? undefined : ' : ''}'http://localhost:' + await require('./modelPatch/proxy').startApiServerProxy();\n` +
+      `    const ${VOICE_URL} = ${hasOptions ? 'options.wsl ? undefined : ' : ''}'https://localhost:' + await require('./modelPatch/proxy').startVoiceServerProxy();\n`,
   });
   return applyEdits(file, source, edits);
 }
@@ -235,7 +260,7 @@ function patchPreload(vendorBytes, augmentations) {
         unsupported(name, 'sandboxed custom preload may only require electron');
       }
       if (
-        (ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'exposeInMainWorld') ||
+        (ts.isPropertyAccessExpression(node.expression) && node.expression.name.text === 'exposeInMainWorld' && !(name === 'nativeRemotePreload.js' && ts.isStringLiteral(node.arguments[0]) && node.arguments[0].text === 'antigravitySshNative')) ||
         node.expression.kind === ts.SyntaxKind.ImportKeyword
       ) {
         unsupported(name, 'custom preload must not redeclare vendor bridges or import other modules');
@@ -264,7 +289,7 @@ export function planRuntimePatch(readVendorFile, readBuildFile) {
       'dist/preload.js',
       patchPreload(
         readInput(readVendorFile, 'dist/preload.js'),
-        ['customPreload.js', 'contextUsagePreload.js'].map((name) => ({ name, bytes: readInput(readBuildFile, name) })),
+        ['customPreload.js', 'contextUsagePreload.js', 'nativeRemotePreload.js'].map((name) => ({ name, bytes: readInput(readBuildFile, name) })),
       ),
     ],
   ]);

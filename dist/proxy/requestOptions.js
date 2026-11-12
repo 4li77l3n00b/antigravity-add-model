@@ -45,7 +45,7 @@ function isAntigravityCompactionRequest(body) {
         text.endsWith('Do not call any tools. You must respond directly with the summary without calling any tools or attempting further investigation.');
     return legacyTemplate || sessionTemplate;
 }
-function applyCompactionEffort(result, model, format, effort) {
+function applyReasoningEffort(result, model, format, effort, compaction = false) {
     // Remove competing provider knobs, including ones supplied via extraBody.
     const reasoning = result.reasoning && typeof result.reasoning === 'object' && !Array.isArray(result.reasoning)
         ? { ...result.reasoning }
@@ -90,7 +90,7 @@ function applyCompactionEffort(result, model, format, effort) {
     }
     else {
         const generation = { ...(result.generationConfig || {}) };
-        if (model.gateway) {
+        if (model.gateway && compaction) {
             // Gateway aliases do not reveal the eventual provider. Preserve the
             // explicit compaction choice for its provider-specific mapping instead.
             delete generation.thinkingConfig;
@@ -217,8 +217,13 @@ function applyRequestOptions(payload, model, format, stream, compactionEffort) {
             }
         }
     }
+    if (compactionEffort === undefined &&
+        format === 'google' &&
+        model.reasoningEffort !== undefined &&
+        model.thinkingBudget === undefined)
+        applyReasoningEffort(result, model, format, model.reasoningEffort);
     if (compactionEffort !== undefined)
-        applyCompactionEffort(result, model, format, compactionEffort);
+        applyReasoningEffort(result, model, format, compactionEffort, true);
     return result;
 }
 function parseRetryAfter(value, now = Date.now()) {

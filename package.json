@@ -14,7 +14,7 @@
     "node": ">=22.12.0"
   },
   "scripts": {
-    "build": "npx tsc",
+    "build": "npx tsc && esbuild src/proxy/voiceWebSocket.ts --bundle --platform=node --format=cjs --target=node22 --outfile=dist/proxy/voiceWebSocket.js --sourcemap",
     "dev": "npx tsc --watch",
     "test": "vitest run",
     "test:watch": "vitest",
@@ -51,13 +51,17 @@
     "chrome-devtools-mcp": "^1.12.0",
     "electron-log": "^5.4.3",
     "electron-updater": "^6.8.11",
-    "shell-env": "^4.0.3"
+    "selfsigned": "5.5.0",
+    "shell-env": "^4.0.3",
+    "ws": "8.22.1"
   },
   "devDependencies": {
     "@electron/asar": "4.3.0",
     "@types/node": "^25.9.1",
+    "@types/ws": "8.18.2",
     "@typescript-eslint/eslint-plugin": "^8.44.1",
     "@typescript-eslint/parser": "^8.44.1",
+    "esbuild": "0.28.2",
     "eslint": "^9.33.0",
     "eslint-config-prettier": "^10.1.8",
     "jsdom": "^29.1.1",

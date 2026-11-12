@@ -281,12 +281,19 @@ class ModelStore {
             throw new Error('A model with that name already exists');
         }
         const prepared = this.prepare({ ...input, name: target }, existing);
+        if (input.copyFrom)
+            prepared.toolProxy = false;
         const replaceName = input.copyFrom ? target : sourceName;
         const index = models.findIndex((model) => model.name === replaceName);
         if (index < 0)
             models.push(prepared);
         else
             models[index] = prepared;
+        if (prepared.toolProxy === true) {
+            for (const model of models)
+                if (model.name !== prepared.name)
+                    model.toolProxy = false;
+        }
         if (input.originalName && sourceName !== target) {
             for (const model of models) {
                 if (Array.isArray(model.fallbackModels))
@@ -305,6 +312,8 @@ class ModelStore {
     }
     import(payload) {
         const incoming = normalizeModelConfig(payload);
+        if (incoming.filter((model) => model.toolProxy === true).length > 1)
+            throw new Error('Choose only one TokenNest tool proxy source');
         const models = this.read();
         const seen = new Set();
         for (const item of incoming) {
@@ -318,6 +327,13 @@ class ModelStore {
                 models.push(prepared);
             else
                 models[index] = prepared;
+        }
+        const toolSource = incoming.find((model) => model.toolProxy === true);
+        if (toolSource) {
+            const sourceName = toolSource.name.startsWith('models/') ? toolSource.name : `models/${toolSource.name}`;
+            for (const model of models)
+                if (model.name !== sourceName)
+                    model.toolProxy = false;
         }
         writeJsonAtomic(this.filename, { models });
         return incoming.length;

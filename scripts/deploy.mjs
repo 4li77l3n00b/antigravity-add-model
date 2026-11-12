@@ -18,10 +18,16 @@ const ORIGINAL_URL = Buffer.from('https://daily-cloudcode-pa.googleapis.com');
 const PATCHED_URL = Buffer.from('http://localhost:50999/v1internal/xxxxxxx');
 export const REQUIRED_BUILD_FILES = [
   'desktop.js',
+  'remoteAcp.js',
+  'remoteAcpIpc.js',
+  'nativeRemote.js',
+  'nativeSwarm.js',
+  'nativeRemotePreload.js',
   'customPreload.js',
   'contextUsagePreload.js',
   'customIpc.js',
   'modelStore.js',
+  'customNodes.js',
   'modelManagement.js',
   'modelActions.js',
   'chatContext.js',
@@ -58,6 +64,12 @@ export const REQUIRED_BUILD_FILES = [
   'proxy/modelUtils.js',
   'proxy/modelCatalog.js',
   'proxy/cloudCodeRouting.js',
+  'proxy/upstreamTools.js',
+  'proxy/nativeVoice.js',
+  'proxy/voiceTransport.js',
+  'proxy/voiceWebSocket.js',
+  'proxy/nativeTransport.js',
+  'proxy/localTranscription.js',
   'proxy/translators/utils.js',
   'proxy/translators/images.js',
 ];
@@ -191,6 +203,7 @@ export function resolveResources(input, platform = process.platform, env = proce
         : [
             path.join(os.homedir(), '.local/share/Programs/antigravity/resources'),
             '/opt/antigravity/resources',
+            '/opt/Antigravity/resources',
             '/usr/lib/antigravity/resources',
             '/usr/local/lib/antigravity/resources',
           ];
@@ -369,7 +382,10 @@ export function inspectForUpdate(options = {}) {
   const state = readState(resources);
   const current = fingerprint(resources);
   if (state && !equal(state.patched, current)) {
-    fail('RESTORE_REFUSED', 'This installation changed after patching, possibly during an update. Do not restore an older backup over it.');
+    fail(
+      'RESTORE_REFUSED',
+      'This installation changed after patching, possibly during an update. Do not restore an older backup over it.',
+    );
   }
   if (state) verifyBackup(resources, state);
   return { resources, version: info.version, status: state ? 'managed' : 'unmanaged' };
@@ -496,7 +512,8 @@ export async function deploy(options = {}, operations = {}) {
   let lockFd;
   try {
     lockFd = fs.openSync(lock, 'wx');
-  } catch {
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
     fail('DEPLOY_LOCKED', `Another deployment or an interrupted run owns ${lock}. Inspect it before retrying.`);
   }
   fs.writeFileSync(lockFd, `pid=${process.pid}\n`);

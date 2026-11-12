@@ -6,7 +6,7 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import * as asar from '@electron/asar';
-import { deploy, fingerprint, parseArgs, preflight, REQUIRED_BUILD_FILES } from '../../scripts/deploy.mjs';
+import { deploy, fingerprint, parseArgs, preflight, resolveResources, REQUIRED_BUILD_FILES } from '../../scripts/deploy.mjs';
 
 // Real ASAR packing can exceed the default 5 seconds on a busy Windows disk.
 // Allow it to finish before cleanup removes files still being packed.
@@ -51,7 +51,7 @@ async function installVendor(
   );
   put(
     path.join(source, 'dist/languageServer.js'),
-    `// original server\nfunction startLanguageServer(port, csrf, options = {}) {\n const { headless, wsl } = options;\n return new Promise((resolve, reject) => {\n const args = ['--https_server_port', String(port), '--api_server_url', 'https://generativelanguage.googleapis.com', '--cloud_code_endpoint', 'https://daily-cloudcode-pa.googleapis.com', '--enable_sidecars'];\n resolve({ port, args });\n });\n}\n`,
+    `// original server\nfunction startLanguageServer(port, csrf, options = {}) {\n const { headless, wsl } = options;\n return new Promise((resolve, reject) => {\n const env = {};\n const args = ['--https_server_port', String(port), '--api_server_url', 'https://generativelanguage.googleapis.com', '--cloud_code_endpoint', 'https://daily-cloudcode-pa.googleapis.com', '--enable_sidecars'];\n resolve({ port, args });\n });\n}\n`,
   );
   put(path.join(source, 'dist/ipcHandlers.js'), '// vendor WSL and IPC handlers\n');
   put(path.join(source, 'dist/utils.js'), '// vendor window and certificate settings\n');
@@ -89,6 +89,20 @@ afterEach(() => {
 });
 
 describe('standalone deployment with real ASAR fixtures', () => {
+  it('discovers the capitalized Linux installation directory', () => {
+    const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((filename) => {
+      if (String(filename) === '/opt/Antigravity/resources/app.asar') return {} as fs.Stats;
+      throw Object.assign(new Error('Missing fixture'), { code: 'ENOENT' });
+    });
+    const realpath = vi.spyOn(fs, 'realpathSync').mockImplementation((filename) => String(filename));
+    try {
+      expect(resolveResources(undefined, 'linux')).toBe('/opt/Antigravity/resources');
+    } finally {
+      stat.mockRestore();
+      realpath.mockRestore();
+    }
+  });
+
   it('includes every relative runtime dependency in the deployed addon', () => {
     const packaged = new Set(REQUIRED_BUILD_FILES);
     for (const file of REQUIRED_BUILD_FILES) {
@@ -109,6 +123,24 @@ describe('standalone deployment with real ASAR fixtures', () => {
     expect(result.action).toBe('check');
     expect(fingerprint(f.resources)).toEqual(before);
     expect(fs.existsSync(path.join(f.resources, '.antigravity-model-patch'))).toBe(false);
+  });
+
+  it.each(['EACCES', 'EEXIST'])('distinguishes lock creation errors: %s', async (code) => {
+    const f = await fixture();
+    const before = fingerprint(f.resources);
+    const openSync = fs.openSync;
+    const open = vi.spyOn(fs, 'openSync').mockImplementation((filename, flags, mode) => {
+      if (String(filename).endsWith(`${path.sep}deploy.lock`)) {
+        throw Object.assign(new Error('Lock fixture error'), { code });
+      }
+      return openSync(filename, flags, mode);
+    });
+    try {
+      await expect(deploy(f)).rejects.toMatchObject({ code: code === 'EEXIST' ? 'DEPLOY_LOCKED' : code });
+    } finally {
+      open.mockRestore();
+    }
+    expect(fingerprint(f.resources)).toEqual(before);
   });
 
   it('adds hooks while preserving current vendor APIs, dependencies, and every unpacked file', async () => {

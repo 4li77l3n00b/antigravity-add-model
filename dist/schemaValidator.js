@@ -22,6 +22,7 @@ exports.validateOpenAiChunk = validateOpenAiChunk;
 exports.validateAnthropicEvent = validateAnthropicEvent;
 const providers_1 = require("./providers");
 const modelUtils_1 = require("./proxy/modelUtils");
+const upstreamTools_1 = require("./proxy/upstreamTools");
 /**
  * Validates a Gemini candidate object structure.
  */
@@ -140,9 +141,19 @@ function validateCustomModel(model) {
     }
     if (m.provider === 'google-cloudcode' && m.apiFormat !== undefined && m.apiFormat !== 'google')
         return { valid: false, error: 'Google Cloud Code requires the google API format' };
-    for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'encryptedHeaders', 'encryptedGoogleAccounts']) {
+    for (const field of ['enabled', 'rawUrl', 'gateway', 'supportsVision', 'supportsThinking', 'encryptedHeaders', 'encryptedGoogleAccounts', 'toolProxy']) {
         if (m[field] !== undefined && typeof m[field] !== 'boolean')
             return { valid: false, error: `${field} must be a boolean` };
+    }
+    if (m.toolProxy === true) {
+        try {
+            (0, upstreamTools_1.toolServiceBase)(apiUrl);
+        }
+        catch (error) {
+            return { valid: false, error: error.message };
+        }
+        if (m.provider === 'google-cloudcode' || m.allowUnauthorized === true || !m.apiKey || m.apiKey === 'none')
+            return { valid: false, error: 'TokenNest tool proxy requires an API key and verified TLS, without Google OAuth account mode' };
     }
     for (const field of ['reasoningEffort', 'compactionReasoningEffort']) {
         if (m[field] !== undefined && !['none', 'minimal', 'low', 'medium', 'high', 'xhigh'].includes(m[field])) {

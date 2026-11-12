@@ -251,6 +251,12 @@ describe('standalone custom model addon', () => {
   it('registers only addon storage channels and exposes no replacement renderer APIs', () => {
     const fixture = createFixture(true);
     expect([...fixture.handlers.keys()]).toEqual([
+      'storage:get-custom-nodes',
+      'storage:save-custom-node',
+      'storage:delete-custom-node',
+      'storage:save-node-model',
+      'storage:get-native-gemini-models',
+      'storage:discover-node-models',
       'storage:get-custom-models',
       'storage:save-custom-model',
       'storage:delete-custom-model',

@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/vahapogut/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/vahapogut/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml"><img src="https://github.com/4li77l3n00b/antigravity-add-model/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI"></a>
   <a href="#installation"><img src="https://img.shields.io/badge/Node.js-22.13%2B-339933?logo=nodedotjs&logoColor=white" alt="Node.js 22.13 or newer"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache--2.0-2563eb" alt="Apache License 2.0"></a>
 </p>
@@ -24,10 +24,23 @@
   <a href="#quick-links">Quick links</a> ·
   <a href="#screenshots">Screenshots</a> ·
   <a href="#documentation">Documentation</a> ·
-  <a href="https://github.com/vahapogut/antigravity-add-model/issues/new">Report an issue</a>
+  <a href="https://github.com/4li77l3n00b/antigravity-add-model/issues/new">Report an issue</a>
 </p>
 
 ---
+
+## Desktop and SSH fork
+
+This is a fork of [vahapogut/antigravity-add-model](https://github.com/vahapogut/antigravity-add-model). It retains the upstream project and adds:
+
+- Custom endpoints with model discovery, optional replacement of built-in Gemini models, and additional provider models under each endpoint.
+- Model lists scoped to the active project: local models for local projects and the remote agent's advertised models for SSH projects.
+- Optional upstream tool and voice API routing through a compatible TokenNest endpoint, selected on the endpoint page.
+- SSH projects in Antigravity's existing project and conversation interface, including remote history, native Swarm views, and capability-gated permanent deletion. Archive remains a local list preference.
+
+The bundled [ACP SSH component](acp-ssh/README.md) provides the remote host and Antigravity adapters. Install it on the remote Linux host, then use **New SSH Project** in the desktop's project interface. Enter an SSH alias or `user@host`, the absolute remote `acp-ssh` executable path, an instance name, and a remote working directory. SSH uses your existing keys and `known_hosts`.
+
+The standalone desktop integration was checked against **Antigravity 2.29.1**. Permanent deletion requires the remote host to explicitly advertise the extension; busy sessions and sessions with actual Swarm/parent-child references are rejected. The repository contains addon source and build output, not the vendor application or CLI binaries. See [compatibility](docs/compatibility.md) and the ACP SSH guide before installing.
 
 Add external API providers and local models alongside Antigravity's built-in models. Configure them in Settings, switch models from the chat picker, and optionally route requests through a gateway with history, fallback providers, and a browser dashboard.
 
@@ -41,7 +54,7 @@ Add external API providers and local models alongside Antigravity's built-in mod
 | [Installation](#installation) | [Gateway and web dashboard](#optional-gateway-and-web-dashboard) | [Troubleshooting and recovery](#updates-diagnostics-and-recovery) |
 | [Add your first model](#add-your-first-model) | [Connect from another computer](#connect-from-another-computer) | [Supported app versions and layouts](docs/compatibility.md) |
 | [Providers and model catalogs](docs/providers.md) | [Model configuration](docs/configuration.md) | [Changelog](CHANGELOG.md) |
-| [Development and contributing](#development-and-contributing) | [Google account setup](docs/configuration.md#google-cloud-code-account-pools) | [Browse existing issues](https://github.com/vahapogut/antigravity-add-model/issues) |
+| [Development and contributing](#development-and-contributing) | [Google account setup](docs/configuration.md#google-cloud-code-account-pools) | [Browse existing issues](https://github.com/4li77l3n00b/antigravity-add-model/issues) |
 | [Antigravity IDE setup](docs/ide.md) | [Source-based feature comparison](docs/feature-parity.md) | [IDE status and restore](docs/ide.md#status-and-recovery) |
 | [Cloudflare setup wizard](docs/workers-ai-setup.md) | [Fallback chains](docs/providers.md#fallback-chains-for-rate-limited-providers) | [Local proxy security](docs/compatibility.md#local-proxy-trust-boundary) |
 
@@ -120,7 +133,7 @@ Map model aliases to providers and configure fallback models and context limits 
 You need the **standalone Antigravity desktop app**, Git, and **Node.js 22.13 or newer**. This Node version covers both the desktop addon and the optional gateway.
 
 ```sh
-git clone https://github.com/vahapogut/antigravity-add-model.git
+git clone https://github.com/4li77l3n00b/antigravity-add-model.git
 cd antigravity-add-model
 npm ci --ignore-scripts
 npm run build
@@ -361,7 +374,7 @@ npm run test:integration
 
 CI runs on Windows, macOS, and Linux using local provider fixtures and isolated installation packages. It does not validate live provider credentials or every future Antigravity release.
 
-For a new provider, start with [the desktop preset catalog](src/providers.ts), [protocol registry](src/proxy/registry.ts), and [gateway provider catalog](gateway/src/provider-catalog.ts). Changes should include relevant tests and rebuilt desktop output. Pull requests are welcome; [open an issue](https://github.com/vahapogut/antigravity-add-model/issues) for reproducible bugs, with your app type/version, OS, and diagnostics.
+For a new provider, start with [the desktop preset catalog](src/providers.ts), [protocol registry](src/proxy/registry.ts), and [gateway provider catalog](gateway/src/provider-catalog.ts). Changes should include relevant tests and rebuilt desktop output. Pull requests are welcome; [open an issue](https://github.com/4li77l3n00b/antigravity-add-model/issues) for reproducible bugs, with your app type/version, OS, and diagnostics.
 
 ## License and credits
 

@@ -243,6 +243,9 @@ window.addEventListener('DOMContentLoaded', () => {
       #agy-custom-models-section h3{font-size:13px;margin:0;color:#f4f4f5}
       .agy-toolbar,.agy-actions,.agy-group-heading,.agy-row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
       .agy-toolbar{justify-content:space-between;margin-bottom:12px}.agy-actions{margin:10px 0}
+      .agy-model-row{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #303036}
+      .agy-model-row>span{flex:1;min-width:0;overflow-wrap:anywhere}.agy-model-row>.agy-field{flex:1;min-width:220px}
+      #agy-modal-overlay .agy-btn[aria-pressed=true]{background:#3f3f46;border-color:#a1a1aa}
       .agy-muted{color:#a1a1aa;font-size:12px;overflow-wrap:anywhere}.agy-group{margin-top:16px;border-top:1px solid #303036;padding-top:14px}
       .agy-group-heading{justify-content:space-between}.agy-row{justify-content:space-between;border:1px solid #303036;border-radius:8px;padding:12px;margin-top:8px;background:#202024}
       .agy-row-info{flex:1;min-width:150px;overflow-wrap:anywhere}.agy-row[data-enabled="false"] .agy-row-info{opacity:.55}
@@ -262,12 +265,15 @@ window.addEventListener('DOMContentLoaded', () => {
       #agy-modal-overlay details{border:1px solid #303036;border-radius:8px;margin:12px 0;padding:12px}#agy-modal-overlay summary{cursor:pointer;margin-bottom:10px;font-weight:500}
       .agy-fleet{margin:18px 0;border:1px solid #303036;border-radius:10px;padding:14px;min-width:0}.agy-fleet-table{width:100%;border-collapse:separate;border-spacing:0 12px;text-align:left;table-layout:fixed}.agy-fleet-table td{padding:0}.agy-fleet-card{background:#202024;border:1px solid #3f3f46;border-radius:10px;padding:16px;min-width:0}.agy-fleet-card-header{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}.agy-fleet-card-header .agy-actions{margin:0}.agy-fleet-label{font-size:14px;font-weight:600;overflow-wrap:anywhere}.agy-fleet-pools{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,300px),1fr));gap:12px;margin-top:14px}.agy-fleet-pool{border:1px solid #303036;border-radius:8px;padding:12px;background:#18181b;min-width:0}.agy-fleet-pool .agy-actions{margin-bottom:0}.agy-fleet-account-state{margin-top:5px}.agy-pool-badge{display:inline-block;padding:2px 6px;border-radius:5px;background:#27272c;color:#a1a1aa;font-size:11px}.agy-pool-preferred,.agy-plan-pro{color:#86efac}.agy-pool-disabled{color:#fca5a5}.agy-fleet-quotas{display:grid;gap:10px;margin:12px 0}.agy-quota-group{display:grid;gap:8px}.agy-quota-group-title{font-size:11px;font-weight:600;color:#d4d4d8}.agy-quota-bucket{min-width:0}.agy-quota-heading{display:flex;justify-content:space-between;gap:8px;font-size:12px;flex-wrap:wrap}.agy-quota-bucket progress{display:block;width:100%;height:7px;margin:5px 0;accent-color:#86efac}.agy-quota-bucket[data-exhausted="true"] progress{accent-color:#f87171}.agy-quota-bucket[data-exhausted="true"] .agy-quota-value{color:#fca5a5}.agy-quota-reset{font-size:11px;color:#a1a1aa}.agy-fleet-fallback{display:flex;align-items:center;gap:8px;font-size:12px}.agy-fleet-fallback input{width:auto!important;accent-color:#86efac}.agy-fleet-details[hidden]{display:none}
       #agy-fleet-target-pool{font:inherit;color:#fafafa;background:#25252a;border:1px solid #414149;border-radius:6px;padding:6px;max-width:240px}#agy-fleet-target-pool option{background:#25252a;color:#fafafa}
+      #agy-new-ssh-project{width:auto;min-width:32px;flex-shrink:0;padding:0 6px;font-size:10px;white-space:nowrap}
+      #agy-new-ssh-project:focus-visible{outline:2px solid #a78bfa;outline-offset:2px}
       .agy-model-search-box{padding:6px 8px}.agy-model-search-input{box-sizing:border-box;width:100%;font:inherit;color:inherit;background:transparent;border:1px solid #52525b;border-radius:5px;padding:6px}.agy-model-no-results{padding:8px;color:#a1a1aa;font-size:12px}
       @media(max-width:600px){.agy-grid{grid-template-columns:1fr}#agy-modal-card{padding:16px}.agy-row .agy-actions{width:100%}}
     `;
     document.head.append(style);
   }
   function openModal(title: string): { body: HTMLElement; status: HTMLElement; close: () => void } {
+    installStyles();
     cancelModalOperation?.();
     cancelModalOperation = undefined;
     document.getElementById('agy-modal-overlay')?.remove();
@@ -743,6 +749,7 @@ window.addEventListener('DOMContentLoaded', () => {
     await renderCustomModelsList();
     const mount = findSettingsMount();
     if (mount) findRefreshButton(mount)?.click();
+    window.dispatchEvent(new Event('agy-models-changed'));
     restore();
   }
   function uniqueName(base: string): string {
@@ -778,10 +785,14 @@ window.addEventListener('DOMContentLoaded', () => {
       button(
         'Delete model',
         async () => {
-          const visibleRows = Array.from(document.querySelectorAll<HTMLElement>('#agy-custom-models-content [data-model-name]'));
+          const visibleRows = Array.from(
+            document.querySelectorAll<HTMLElement>('#agy-custom-models-content [data-model-name]'),
+          );
           const deletedIndex = visibleRows.findIndex((row) => row.dataset.modelName === model.name);
-          const adjacentNames = [...visibleRows.slice(deletedIndex + 1), ...visibleRows.slice(0, deletedIndex).reverse()]
-            .map((row) => row.dataset.modelName);
+          const adjacentNames = [
+            ...visibleRows.slice(deletedIndex + 1),
+            ...visibleRows.slice(0, deletedIndex).reverse(),
+          ].map((row) => row.dataset.modelName);
           setStatus(status, 'Deleting model…');
           requireSuccess(await storageAPI.deleteCustomModel(model.name));
           // The user may have closed this dialog while storage was updating.
@@ -789,12 +800,21 @@ window.addEventListener('DOMContentLoaded', () => {
           if (dialogStillOpen) close();
           const focusAfterClose = document.activeElement;
           await modelsChanged();
-          if (dialogStillOpen && !document.getElementById('agy-modal-overlay') &&
-            (document.activeElement === document.body || document.activeElement === focusAfterClose)) {
-            const remainingRows = Array.from(document.querySelectorAll<HTMLElement>('#agy-custom-models-content [data-model-name]'));
-            const adjacentRow = adjacentNames.map((name) => remainingRows.find((row) => row.dataset.modelName === name)).find(Boolean);
-            const nextFocus = Array.from(adjacentRow?.querySelectorAll<HTMLButtonElement>('button') || [])
-              .find((button) => button.textContent === 'Delete') || document.getElementById('agy-add-model');
+          if (
+            dialogStillOpen &&
+            !document.getElementById('agy-modal-overlay') &&
+            (document.activeElement === document.body || document.activeElement === focusAfterClose)
+          ) {
+            const remainingRows = Array.from(
+              document.querySelectorAll<HTMLElement>('#agy-custom-models-content [data-model-name]'),
+            );
+            const adjacentRow = adjacentNames
+              .map((name) => remainingRows.find((row) => row.dataset.modelName === name))
+              .find(Boolean);
+            const nextFocus =
+              Array.from(adjacentRow?.querySelectorAll<HTMLButtonElement>('button') || []).find(
+                (button) => button.textContent === 'Delete',
+              ) || document.getElementById('agy-add-model');
             nextFocus?.focus({ preventScroll: true });
           }
         },
@@ -810,7 +830,9 @@ window.addEventListener('DOMContentLoaded', () => {
   let fleetError = '';
   let fleetCollapsed = false;
   let fleetTargetPool = '';
-  try { fleetCollapsed = localStorage.getItem('agy_google_fleet_collapsed') === 'true'; } catch {}
+  try {
+    fleetCollapsed = localStorage.getItem('agy_google_fleet_collapsed') === 'true';
+  } catch {}
   let fleetRefreshing = false;
   let fleetTimer: ReturnType<typeof setInterval> | undefined;
   function fleetMembers(models: CustomModelEntry[]) {
@@ -839,19 +861,41 @@ window.addEventListener('DOMContentLoaded', () => {
     return [...rows.values()];
   }
   function quotaKey(model: CustomModelEntry, account: GoogleAccountEntry) {
-    return JSON.stringify([model.name, model.apiUrl, model.externalModelName, account.id, account.email, account.clientId, account.project, account.authMode, account.cloudCodeEndpoint]);
+    return JSON.stringify([
+      model.name,
+      model.apiUrl,
+      model.externalModelName,
+      account.id,
+      account.email,
+      account.clientId,
+      account.project,
+      account.authMode,
+      account.cloudCodeEndpoint,
+    ]);
   }
   async function connectFleetAccount(modelName: string, replaceAccountId?: string): Promise<void> {
     const { body, status, close } = openModal(replaceAccountId ? 'Reconnect Google account' : 'Add Google account');
-    body.append(element('p', 'agy-muted', `Complete Google sign-in in your browser. The account is saved to ${modelName}.`));
-    cancelModalOperation = () => { void ipcRenderer.invoke('storage:google-login-cancel'); };
+    body.append(
+      element('p', 'agy-muted', `Complete Google sign-in in your browser. The account is saved to ${modelName}.`),
+    );
+    cancelModalOperation = () => {
+      void ipcRenderer.invoke('storage:google-login-cancel');
+    };
     setStatus(status, 'Waiting for Google sign-in…');
     try {
-      const result = await ipcRenderer.invoke('storage:google-login', { authMode: 'antigravity' }) as ActionResult & { account?: GoogleAccountEntry };
+      const result = (await ipcRenderer.invoke('storage:google-login', { authMode: 'antigravity' })) as ActionResult & {
+        account?: GoogleAccountEntry;
+      };
       if (!body.isConnected) return;
       requireSuccess(result);
       if (!result.account) throw new Error('Google did not return an account.');
-      requireSuccess(await ipcRenderer.invoke('storage:google-link-account', { modelName, accountId: result.account.id, ...(replaceAccountId ? { replaceAccountId } : {}) }));
+      requireSuccess(
+        await ipcRenderer.invoke('storage:google-link-account', {
+          modelName,
+          accountId: result.account.id,
+          ...(replaceAccountId ? { replaceAccountId } : {}),
+        }),
+      );
       quotaCache.clear();
       cancelModalOperation = undefined;
       close();
@@ -862,23 +906,43 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function removeFleetAccount(account: GoogleAccountEntry, modelName: string) {
     const { body, status, close } = openModal('Remove Google account');
-    body.append(element('p', '', `Remove ${account.email || account.label || account.id} from ${modelName}? This model will be disabled if no enabled account remains. Other model pools and your IDE login are preserved.`));
-    body.append(button('Remove account', async () => {
-      requireSuccess(await ipcRenderer.invoke('storage:google-remove-account', { modelName, accountId: account.id }));
-      quotaCache.clear();
-      close();
-      await modelsChanged();
-    }, status), button('Cancel', close));
+    body.append(
+      element(
+        'p',
+        '',
+        `Remove ${account.email || account.label || account.id} from ${modelName}? This model will be disabled if no enabled account remains. Other model pools and your IDE login are preserved.`,
+      ),
+    );
+    body.append(
+      button(
+        'Remove account',
+        async () => {
+          requireSuccess(
+            await ipcRenderer.invoke('storage:google-remove-account', { modelName, accountId: account.id }),
+          );
+          quotaCache.clear();
+          close();
+          await modelsChanged();
+        },
+        status,
+      ),
+      button('Cancel', close),
+    );
   }
   async function runFleetAction(action: () => Promise<void>): Promise<void> {
     if (fleetBusy) throw new Error('Wait for the current account change to finish.');
     fleetBusy = true;
     fleetError = '';
     renderGoogleFleet();
-    const disabledStates = new Map<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement, boolean>();
+    const disabledStates = new Map<
+      HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement,
+      boolean
+    >();
     const roots = document.querySelectorAll<HTMLElement>('#agy-custom-models-section, #agy-modal-overlay');
     for (const root of roots) {
-      for (const control of root.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>('button,input,select,textarea')) {
+      for (const control of root.querySelectorAll<
+        HTMLButtonElement | HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement
+      >('button,input,select,textarea')) {
         disabledStates.set(control, control.disabled);
         control.disabled = true;
       }
@@ -915,37 +979,77 @@ window.addEventListener('DOMContentLoaded', () => {
       const selected = new Set(members.filter((m) => m.owner.name === owner.name).map((m) => m.account.id));
       if (!selected.size || !Array.isArray(owner.googleAccounts)) continue;
       const accounts = owner.googleAccounts as GoogleAccountEntry[];
-      const updated = accounts.map((account) => selected.has(account.id) ? update(account) : account);
+      const updated = accounts.map((account) => (selected.has(account.id) ? update(account) : account));
       const hadEnabled = accounts.some((account) => account.enabled !== false);
       const hasEnabled = updated.some((account) => account.enabled !== false);
-      requireSuccess(await storageAPI.saveCustomModel({
-        ...owner,
-        googleAccounts: updated,
-        ...(updateAvailability ? { enabled: hasEnabled ? (hadEnabled ? owner.enabled : true) : false } : {}),
-      }));
+      requireSuccess(
+        await storageAPI.saveCustomModel({
+          ...owner,
+          googleAccounts: updated,
+          ...(updateAvailability ? { enabled: hasEnabled ? (hadEnabled ? owner.enabled : true) : false } : {}),
+        }),
+      );
     }
   }
   function editFleetLabel(identity: string, members: ReturnType<typeof fleetMembers>): void {
     const { body, status, close } = openModal('Edit account label');
-    body.append(element('p', 'agy-muted', `Update the label for ${identity}. Use a model pool's account editor to change its credentials or project.`));
+    body.append(
+      element(
+        'p',
+        'agy-muted',
+        `Update the label for ${identity}. Use a model pool's account editor to change its credentials or project.`,
+      ),
+    );
     const label = field(body, 'Account label', 'agy-fleet-account-label', members[0]?.account.label || '');
-    body.append(button('Save account label', async () => {
-      await runFleetAction(() => updateFleetAccounts(members, (account) => ({ ...account, label: label.value.trim() })));
-      close();
-    }, status, true), button('Cancel', close));
+    body.append(
+      button(
+        'Save account label',
+        async () => {
+          await runFleetAction(() =>
+            updateFleetAccounts(members, (account) => ({ ...account, label: label.value.trim() })),
+          );
+          close();
+        },
+        status,
+        true,
+      ),
+      button('Cancel', close),
+    );
   }
   function removeFleetMemberships(identity: string, members: ReturnType<typeof fleetMembers>): void {
     const { body, status, close } = openModal('Remove account from fleet');
-    body.append(element('p', '', `Remove ${identity} from ${members.length} assigned model pool${members.length === 1 ? '' : 's'}?`),
-      element('p', 'agy-muted', 'Model definitions and other accounts are preserved. Pools without enabled accounts will be disabled.'));
-    body.append(button('Remove from all pools', async () => {
-      await runFleetAction(async () => {
-        for (const { owner, account } of members) {
-          requireSuccess(await ipcRenderer.invoke('storage:google-remove-account', { modelName: owner.name, accountId: account.id }));
-        }
-      });
-      close();
-    }, status), button('Cancel', close));
+    body.append(
+      element(
+        'p',
+        '',
+        `Remove ${identity} from ${members.length} assigned model pool${members.length === 1 ? '' : 's'}?`,
+      ),
+      element(
+        'p',
+        'agy-muted',
+        'Model definitions and other accounts are preserved. Pools without enabled accounts will be disabled.',
+      ),
+    );
+    body.append(
+      button(
+        'Remove from all pools',
+        async () => {
+          await runFleetAction(async () => {
+            for (const { owner, account } of members) {
+              requireSuccess(
+                await ipcRenderer.invoke('storage:google-remove-account', {
+                  modelName: owner.name,
+                  accountId: account.id,
+                }),
+              );
+            }
+          });
+          close();
+        },
+        status,
+      ),
+      button('Cancel', close),
+    );
   }
   function relativeQuotaReset(value: string): string {
     const diff = Date.parse(value) - Date.now();
@@ -989,10 +1093,21 @@ window.addEventListener('DOMContentLoaded', () => {
         const fraction = bucket.remainingFraction;
         const known = typeof fraction === 'number' && Number.isFinite(fraction);
         block.dataset.exhausted = String(known && fraction <= 0);
-        const title = bucket.displayName || ({ weekly: 'Weekly limit', five_hour: 'Five-hour limit', daily: 'Daily limit' } as Record<string, string>)[bucket.id] || bucket.id;
+        const title =
+          bucket.displayName ||
+          ({ weekly: 'Weekly limit', five_hour: 'Five-hour limit', daily: 'Daily limit' } as Record<string, string>)[
+            bucket.id
+          ] ||
+          bucket.id;
         const heading = element('div', 'agy-quota-heading');
-        heading.append(element('span', 'agy-muted', title),
-          element('span', 'agy-quota-value', known ? `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}% remaining` : 'Remaining quota unknown'));
+        heading.append(
+          element('span', 'agy-muted', title),
+          element(
+            'span',
+            'agy-quota-value',
+            known ? `${Math.round(Math.max(0, Math.min(1, fraction)) * 100)}% remaining` : 'Remaining quota unknown',
+          ),
+        );
         block.append(heading);
         if (known) {
           const progress = element('progress');
@@ -1018,8 +1133,9 @@ window.addEventListener('DOMContentLoaded', () => {
     if (fleetRefreshing || fleetBusy) return;
     const container = document.getElementById('agy-google-account-pool-section');
     if (!container?.isConnected || container.hidden) return;
-    const members = fleetMembers(modelList).filter(({ owner, account }) =>
-      force || Date.now() - (quotaCache.get(quotaKey(owner, account))?.at || 0) >= 120_000);
+    const members = fleetMembers(modelList).filter(
+      ({ owner, account }) => force || Date.now() - (quotaCache.get(quotaKey(owner, account))?.at || 0) >= 120_000,
+    );
     if (!members.length) return;
     const epoch = fleetEpoch;
     fleetRefreshing = true;
@@ -1031,11 +1147,15 @@ window.addEventListener('DOMContentLoaded', () => {
         const key = quotaKey(owner, account);
         if (!force && Date.now() - (quotaCache.get(key)?.at || 0) < 120_000) continue;
         try {
-          const result = await ipcRenderer.invoke('storage:google-test-account', { modelName: owner.name, accountId: account.id }) as ActionResult & { quota?: AccountQuota };
+          const result = (await ipcRenderer.invoke('storage:google-test-account', {
+            modelName: owner.name,
+            accountId: account.id,
+          })) as ActionResult & { quota?: AccountQuota };
           requireSuccess(result);
           if (fleetEpoch === epoch) quotaCache.set(key, { quota: result.quota, at: Date.now() });
         } catch (error) {
-          if (fleetEpoch === epoch) quotaCache.set(key, { error: error instanceof Error ? error.message : String(error), at: Date.now() });
+          if (fleetEpoch === epoch)
+            quotaCache.set(key, { error: error instanceof Error ? error.message : String(error), at: Date.now() });
         }
       }
     } finally {
@@ -1059,12 +1179,17 @@ window.addEventListener('DOMContentLoaded', () => {
     const keys = new Set(fleetMembers(modelList).map(({ account, owner }) => quotaKey(owner, account)));
     for (const key of quotaCache.keys()) if (!keys.has(key)) quotaCache.delete(key);
     const header = element('div', 'agy-toolbar');
-    const collapse = button(`${fleetCollapsed ? '▸' : '▾'} Google account fleet · ${rows.length} account${rows.length === 1 ? '' : 's'}`, () => {
-      fleetCollapsed = !fleetCollapsed;
-      try { localStorage.setItem('agy_google_fleet_collapsed', String(fleetCollapsed)); } catch {}
-      renderGoogleFleet();
-      document.getElementById('agy-fleet-collapse')?.focus({ preventScroll: true });
-    });
+    const collapse = button(
+      `${fleetCollapsed ? '▸' : '▾'} Google account fleet · ${rows.length} account${rows.length === 1 ? '' : 's'}`,
+      () => {
+        fleetCollapsed = !fleetCollapsed;
+        try {
+          localStorage.setItem('agy_google_fleet_collapsed', String(fleetCollapsed));
+        } catch {}
+        renderGoogleFleet();
+        document.getElementById('agy-fleet-collapse')?.focus({ preventScroll: true });
+      },
+    );
     collapse.id = 'agy-fleet-collapse';
     collapse.setAttribute('aria-expanded', String(!fleetCollapsed));
     collapse.setAttribute('aria-controls', 'agy-fleet-details');
@@ -1074,10 +1199,15 @@ window.addEventListener('DOMContentLoaded', () => {
     targetPool.id = 'agy-fleet-target-pool';
     targetPool.setAttribute('aria-label', 'Pool for new Google account');
     for (const model of modelList.filter((model) => model.provider === 'google-cloudcode')) {
-      const option = element('option', '', model.displayName || model.name); option.value = model.name; targetPool.append(option);
+      const option = element('option', '', model.displayName || model.name);
+      option.value = model.name;
+      targetPool.append(option);
     }
-    if (Array.from(targetPool.options).some((option) => option.value === fleetTargetPool)) targetPool.value = fleetTargetPool;
-    targetPool.onchange = () => { fleetTargetPool = targetPool.value; };
+    if (Array.from(targetPool.options).some((option) => option.value === fleetTargetPool))
+      targetPool.value = fleetTargetPool;
+    targetPool.onchange = () => {
+      fleetTargetPool = targetPool.value;
+    };
     actions.append(targetPool);
     const add = button('+ Add Account', () => connectFleetAccount(targetPool.value));
     add.id = 'agy-pool-add-account-btn';
@@ -1094,26 +1224,46 @@ window.addEventListener('DOMContentLoaded', () => {
     fallbackInput.type = 'checkbox';
     fallbackInput.id = 'agy-fleet-native-failover';
     const googleModels = modelList.filter((model) => model.provider === 'google-cloudcode');
-    const enabledFallbacks = googleModels.filter((model) => (model.googlePool as { nativeFailoverEnabled?: boolean } | undefined)?.nativeFailoverEnabled === true).length;
+    const enabledFallbacks = googleModels.filter(
+      (model) => (model.googlePool as { nativeFailoverEnabled?: boolean } | undefined)?.nativeFailoverEnabled === true,
+    ).length;
     fallbackInput.checked = enabledFallbacks > 0;
     fallbackInput.indeterminate = enabledFallbacks > 0 && enabledFallbacks < googleModels.length;
-    fallback.append(fallbackInput, element('span', '', 'Native Google request fallback'),
-      element('span', 'agy-muted', fallbackInput.indeterminate ? 'Some pools enabled' : fallbackInput.checked ? 'Enabled' : 'Disabled'));
+    fallback.append(
+      fallbackInput,
+      element('span', '', 'Native Google request fallback'),
+      element(
+        'span',
+        'agy-muted',
+        fallbackInput.indeterminate ? 'Some pools enabled' : fallbackInput.checked ? 'Enabled' : 'Disabled',
+      ),
+    );
     fallbackInput.addEventListener('change', async () => {
       const enabled = fallbackInput.checked;
       try {
         await runFleetAction(async () => {
           for (const model of await storageAPI.getCustomModels()) {
             if (model.provider !== 'google-cloudcode') continue;
-            requireSuccess(await storageAPI.saveCustomModel({
-              ...model, googlePool: { ...(model.googlePool as object || {}), nativeFailoverEnabled: enabled },
-            }));
+            requireSuccess(
+              await storageAPI.saveCustomModel({
+                ...model,
+                googlePool: { ...((model.googlePool as object) || {}), nativeFailoverEnabled: enabled },
+              }),
+            );
           }
         });
-      } catch { /* runFleetAction displays the persisted result and error. */ }
+      } catch {
+        /* runFleetAction displays the persisted result and error. */
+      }
     });
-    wrap.append(fallback,
-      element('p', 'agy-muted', 'Each model pool keeps its own credentials, project and reported quotas. Preferred accounts are used when eligible; unknown limits are not available credit.'));
+    wrap.append(
+      fallback,
+      element(
+        'p',
+        'agy-muted',
+        'Each model pool keeps its own credentials, project and reported quotas. Preferred accounts are used when eligible; unknown limits are not available credit.',
+      ),
+    );
     const table = element('table', 'agy-fleet-table');
     table.setAttribute('aria-label', 'Google account fleet');
     const tbody = element('tbody');
@@ -1124,17 +1274,32 @@ window.addEventListener('DOMContentLoaded', () => {
       const card = element('article', 'agy-fleet-card');
       const cardHeader = element('div', 'agy-fleet-card-header');
       const identity = element('div');
-      identity.append(element('div', 'agy-fleet-label', accountIdentity),
-        element('div', 'agy-muted', `${members.length} model pool${members.length === 1 ? '' : 's'}`));
-      const labels = [...new Set(members.map(({ account }) => account.label?.trim()).filter((label): label is string => !!label && label !== accountIdentity))];
+      identity.append(
+        element('div', 'agy-fleet-label', accountIdentity),
+        element('div', 'agy-muted', `${members.length} model pool${members.length === 1 ? '' : 's'}`),
+      );
+      const labels = [
+        ...new Set(
+          members
+            .map(({ account }) => account.label?.trim())
+            .filter((label): label is string => !!label && label !== accountIdentity),
+        ),
+      ];
       if (labels.length) identity.append(element('div', 'agy-muted', labels.join(' · ')));
       const activeCount = members.filter(({ account }) => account.enabled !== false).length;
-      identity.append(element('span', `agy-fleet-account-state agy-pool-badge${activeCount === 0 ? ' agy-pool-disabled' : ''}`,
-        activeCount === 0 ? 'Disabled' : activeCount === members.length ? 'Enabled' : 'Partially enabled'));
+      identity.append(
+        element(
+          'span',
+          `agy-fleet-account-state agy-pool-badge${activeCount === 0 ? ' agy-pool-disabled' : ''}`,
+          activeCount === 0 ? 'Disabled' : activeCount === members.length ? 'Enabled' : 'Partially enabled',
+        ),
+      );
       const accountActions = element('div', 'agy-actions agy-fleet-account-actions');
       accountActions.append(
         button(activeCount ? 'Disable account' : 'Enable account', async () => {
-          await runFleetAction(() => updateFleetAccounts(members, (account) => ({ ...account, enabled: activeCount === 0 }), true));
+          await runFleetAction(() =>
+            updateFleetAccounts(members, (account) => ({ ...account, enabled: activeCount === 0 }), true),
+          );
         }),
         button('Edit label', () => editFleetLabel(accountIdentity, members)),
         button('Remove from fleet', () => removeFleetMemberships(accountIdentity, members)),
@@ -1151,22 +1316,49 @@ window.addEventListener('DOMContentLoaded', () => {
         pool.dataset.accountId = account.id;
         const poolHeading = element('div', 'agy-group-heading');
         const poolIdentity = element('div');
-        poolIdentity.append(element('h3', '', owner.displayName || owner.name),
-          element('div', 'agy-muted', [owner.name, `Account: ${account.id}`, account.project ? `Project: ${account.project}` : ''].filter(Boolean).join(' · ')));
-        const preferred = (owner.googlePool as { preferredAccountId?: string } | undefined)?.preferredAccountId === account.id;
+        poolIdentity.append(
+          element('h3', '', owner.displayName || owner.name),
+          element(
+            'div',
+            'agy-muted',
+            [owner.name, `Account: ${account.id}`, account.project ? `Project: ${account.project}` : '']
+              .filter(Boolean)
+              .join(' · '),
+          ),
+        );
+        const preferred =
+          (owner.googlePool as { preferredAccountId?: string } | undefined)?.preferredAccountId === account.id;
         const enabled = owner.enabled !== false && account.enabled !== false;
-        poolHeading.append(poolIdentity, element('span', `agy-pool-badge${preferred ? ' agy-pool-preferred' : ''}`, !enabled ? 'Disabled' : preferred ? 'Preferred' : 'Automatic'));
+        poolHeading.append(
+          poolIdentity,
+          element(
+            'span',
+            `agy-pool-badge${preferred ? ' agy-pool-preferred' : ''}`,
+            !enabled ? 'Disabled' : preferred ? 'Preferred' : 'Automatic',
+          ),
+        );
         pool.append(poolHeading);
         const quota = element('div', 'agy-fleet-quotas');
         renderPoolQuota(quota, cached);
         const rowActions = element('div', 'agy-actions');
         const choose = button(preferred ? 'Automatic' : 'Use preferred', async () => {
           await runFleetAction(async () => {
-            requireSuccess(await ipcRenderer.invoke('storage:google-select-account', { modelName: owner.name, ...(preferred ? {} : { accountId: account.id }) }));
+            requireSuccess(
+              await ipcRenderer.invoke('storage:google-select-account', {
+                modelName: owner.name,
+                ...(preferred ? {} : { accountId: account.id }),
+              }),
+            );
           });
         });
         choose.disabled = !enabled;
-        rowActions.append(choose, account.authMode === 'antigravity' ? button('Reconnect', () => connectFleetAccount(owner.name, account.id)) : button('Edit account', () => openModelModal(owner)), button('Remove', () => removeFleetAccount(account, owner.name)));
+        rowActions.append(
+          choose,
+          account.authMode === 'antigravity'
+            ? button('Reconnect', () => connectFleetAccount(owner.name, account.id))
+            : button('Edit account', () => openModelModal(owner)),
+          button('Remove', () => removeFleetAccount(account, owner.name)),
+        );
         pool.append(quota, rowActions);
         pools.append(pool);
       }
@@ -1182,11 +1374,531 @@ window.addEventListener('DOMContentLoaded', () => {
     container.setAttribute('aria-busy', String(fleetBusy || fleetRefreshing));
     container.replaceChildren(header, status, wrap);
     if (fleetBusy) {
-      for (const control of container.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>('button,input,select')) {
+      for (const control of container.querySelectorAll<HTMLButtonElement | HTMLInputElement | HTMLSelectElement>(
+        'button,input,select',
+      )) {
         if (control !== collapse) control.disabled = true;
       }
     }
     restoreScroll();
+  }
+
+  let customNodes: CustomModelEntry[] = [];
+  async function nodeAction(channel: string, input?: unknown): Promise<any> {
+    const result = await ipcRenderer.invoke(channel, input);
+    requireSuccess(result);
+    return result;
+  }
+  async function openNodeModal(existing?: CustomModelEntry): Promise<void> {
+    const { body, status, close } = openModal(existing ? 'Edit custom node' : 'Add custom node');
+    try {
+      const presets = (await storageAPI.getPresets()).filter((p) => p.id !== 'google-cloudcode');
+      const name = field(body, 'Node name', 'agy-node-name', existing?.displayName || '');
+      const provider = selectField(
+        body,
+        'Provider',
+        'agy-node-provider',
+        presets.map((p) => [p.id, p.label]),
+        existing?.provider || presets[0].id,
+      );
+      const selected = () => presets.find((p) => p.id === provider.value)!;
+      const url = field(body, 'API URL', 'agy-node-url', existing?.apiUrl || selected().defaultUrl, 'url');
+      const key = field(body, 'API key', 'agy-node-key', existing?.apiKey || '', 'password');
+      const format = selectField(
+        body,
+        'API format',
+        'agy-node-format',
+        [
+          ['openai', 'OpenAI compatible'],
+          ['google', 'Gemini'],
+          ['anthropic', 'Anthropic'],
+        ],
+        String(existing?.apiFormat || selected().apiFormat),
+      );
+      const tools = selectField(
+        body,
+        'Proxy upstream tool APIs through this node',
+        'agy-node-tools',
+        [
+          ['false', 'Disabled'],
+          ['true', 'Use this node'],
+        ],
+        String(existing?.toolProxy === true),
+      );
+      const enabled = selectField(
+        body,
+        'Node status',
+        'agy-node-enabled',
+        [
+          ['true', 'Enabled'],
+          ['false', 'Disabled'],
+        ],
+        String(existing?.enabled !== false),
+      );
+      const headers = jsonField(body, 'Custom headers', 'agy-node-headers', existing?.customHeaders);
+      provider.addEventListener('change', () => {
+        url.value = selected().defaultUrl;
+        format.value = selected().apiFormat;
+      });
+      body.append(
+        element(
+          'p',
+          'agy-muted',
+          'Save the connection first, then add models under this node. Each model can replace an existing Gemini entry or appear as an additional model. The tool API option uses this node’s endpoint and credentials.',
+        ),
+      );
+      body.append(
+        button(
+          'Save node',
+          async () => {
+            const result = await nodeAction('storage:save-custom-node', {
+              name: existing?.name,
+              displayName: name.value.trim(),
+              provider: provider.value,
+              apiUrl: validUrl(url.value),
+              apiKey: key.value,
+              apiFormat: format.value,
+              toolProxy: tools.value === 'true',
+              enabled: enabled.value === 'true',
+              customHeaders: readJson(headers, 'Custom headers'),
+            });
+            close();
+            await modelsChanged();
+            if (!existing) await openNodeModels(result.name);
+          },
+          status,
+          true,
+        ),
+      );
+    } catch (error) {
+      setStatus(status, (error as Error).message, true);
+    }
+  }
+  async function openNodeModelPicker(nodeId: string): Promise<void> {
+    const node = customNodes.find((entry) => entry.name === nodeId);
+    if (!node) throw new Error('Reload the custom node list first.');
+    const { body, status } = openModal(`Models · ${node.displayName}`);
+    body.append(
+      element(
+        'p',
+        'agy-muted',
+        'Choose additional models from this endpoint, or map an existing Gemini entry to an upstream model.',
+      ),
+    );
+    const tabs = element('div', 'agy-actions');
+    const additional = element('section');
+    const overrides = element('section');
+    overrides.hidden = true;
+    const additionalTab = button('Additional models', () => {
+      additional.hidden = false;
+      overrides.hidden = true;
+      additionalTab.setAttribute('aria-pressed', 'true');
+      overrideTab.setAttribute('aria-pressed', 'false');
+    });
+    const overrideTab = button('Gemini overrides', () => {
+      additional.hidden = true;
+      overrides.hidden = false;
+      additionalTab.setAttribute('aria-pressed', 'false');
+      overrideTab.setAttribute('aria-pressed', 'true');
+    });
+    additionalTab.setAttribute('aria-pressed', 'true');
+    overrideTab.setAttribute('aria-pressed', 'false');
+    tabs.append(additionalTab, overrideTab);
+    body.append(tabs, additional, overrides);
+    const search = field(additional, 'Search upstream models', 'agy-node-model-search', '', 'search');
+    const toolbar = element('div', 'agy-actions');
+    const list = element('div');
+    list.style.cssText = 'max-height:280px;overflow:auto';
+    list.setAttribute('aria-label', 'Available upstream models');
+    const selected = new Set<string>();
+    let offered: ModelChoice[] = [];
+    let bindings = modelList.filter((entry) => entry.nodeId === nodeId);
+    const options = element('datalist');
+    options.id = 'agy-node-model-options';
+    body.append(options);
+    const count = element('p', 'agy-muted');
+    const render = () => {
+      const query = search.value.trim().toLowerCase();
+      const visible = offered.filter((entry) => `${entry.id} ${entry.displayName || ''}`.toLowerCase().includes(query));
+      list.replaceChildren(
+        ...visible.map((entry) => {
+          const saved = bindings.find((binding) => !binding.nativeOverrideId && binding.externalModelName === entry.id);
+          const row = element('label', 'agy-model-row');
+          const checkbox = element('input');
+          checkbox.type = 'checkbox';
+          checkbox.value = entry.id;
+          checkbox.setAttribute('aria-label', entry.id);
+          checkbox.checked = !!saved || selected.has(entry.id);
+          checkbox.disabled = !!saved;
+          checkbox.addEventListener('change', () => {
+            if (checkbox.checked) selected.add(entry.id);
+            else selected.delete(entry.id);
+            count.textContent = `${selected.size} selected · ${visible.length} shown`;
+          });
+          row.append(
+            checkbox,
+            element(
+              'span',
+              '',
+              `${entry.displayName || entry.id}${entry.displayName && entry.displayName !== entry.id ? ` · ${entry.id}` : ''}${saved ? ' · Added' : ''}`,
+            ),
+          );
+          return row;
+        }),
+      );
+      if (!visible.length)
+        list.append(
+          element(
+            'p',
+            'agy-muted',
+            offered.length ? 'No matching models.' : 'No models loaded. Refresh the list or add an ID manually.',
+          ),
+        );
+      count.textContent = `${selected.size} selected · ${visible.length} shown`;
+    };
+    const fetchModels = async () => {
+      setStatus(status, 'Loading models from endpoint…');
+      const result = await nodeAction('storage:discover-node-models', nodeId);
+      offered = [
+        ...new Map<string, ModelChoice>((result.models || []).map((entry: ModelChoice) => [entry.id, entry])).values(),
+      ];
+      options.replaceChildren(
+        ...offered.map((entry) => {
+          const option = element('option');
+          option.value = entry.id;
+          option.label = entry.displayName || entry.id;
+          return option;
+        }),
+      );
+      render();
+      setStatus(status, `${offered.length} upstream models available.`);
+    };
+    toolbar.append(
+      button('Refresh model list', fetchModels, status),
+      button('Select visible', () => {
+        for (const input of list.querySelectorAll<HTMLInputElement>('input:not(:disabled)')) selected.add(input.value);
+        render();
+      }),
+      button('Clear selection', () => {
+        selected.clear();
+        render();
+      }),
+    );
+    const saveSelected = button(
+      'Add selected models',
+      async () => {
+        let added = 0;
+        try {
+          for (const id of [...selected]) {
+            const result = await nodeAction('storage:save-node-model', {
+              nodeId,
+              externalModelName: id,
+              displayName: offered.find((entry) => entry.id === id)?.displayName || id,
+              enabled: true,
+            });
+            bindings.push({ ...node, name: result.name, nodeId, externalModelName: id } as CustomModelEntry);
+            selected.delete(id);
+            added++;
+          }
+        } finally {
+          render();
+          if (added) await modelsChanged();
+        }
+        setStatus(
+          status,
+          added ? `Added ${added} models. They are available in local projects.` : 'Select at least one model.',
+        );
+      },
+      status,
+      true,
+    );
+    additional.append(toolbar, count, list, saveSelected);
+    const manual = element('details');
+    manual.append(element('summary', '', 'Add a model ID manually'));
+    const manualId = field(manual, 'Upstream model ID', 'agy-node-manual-id');
+    const manualLabel = field(manual, 'Display name (optional)', 'agy-node-manual-label');
+    manual.append(
+      button(
+        'Add manual model',
+        async () => {
+          const id = manualId.value.trim();
+          if (bindings.some((entry) => !entry.nativeOverrideId && entry.externalModelName === id))
+            throw new Error('This model is already added to this node.');
+          const result = await nodeAction('storage:save-node-model', {
+            nodeId,
+            externalModelName: id,
+            displayName: manualLabel.value.trim() || id,
+            enabled: true,
+          });
+          bindings.push({ ...node, name: result.name, nodeId, externalModelName: id } as CustomModelEntry);
+          manualId.value = '';
+          manualLabel.value = '';
+          render();
+          await modelsChanged();
+          setStatus(status, `Added ${id}.`);
+        },
+        status,
+      ),
+    );
+    additional.append(manual);
+    overrides.append(
+      element(
+        'p',
+        'agy-muted',
+        'Each row keeps the original Gemini entry in local projects and sends it to the selected upstream model. Leave rows unchanged to use Google.',
+      ),
+    );
+    try {
+      const targets = await ipcRenderer.invoke('storage:get-native-gemini-models');
+      if (!Array.isArray(targets) || !targets.length)
+        overrides.append(
+          element(
+            'p',
+            'agy-muted',
+            'Refresh the native model list to load the available Gemini entries, then reopen this panel.',
+          ),
+        );
+      for (const target of Array.isArray(targets) ? targets : []) {
+        let binding = bindings.find((entry) => entry.nativeOverrideId === target.id);
+        const other = modelList.find(
+          (entry) =>
+            entry.nativeOverrideId === target.id &&
+            entry.nodeId !== nodeId &&
+            entry.enabled !== false &&
+            entry.nodeEnabled !== false,
+        );
+        const row = element('div', 'agy-model-row');
+        row.style.flexWrap = 'wrap';
+        const upstream = field(row, target.displayName, `agy-override-${target.id}`, binding?.externalModelName || '');
+        upstream.setAttribute('list', options.id);
+        upstream.placeholder = 'Select or enter upstream model ID';
+        if (other) row.append(element('span', 'agy-muted', 'Overridden by another node'));
+        row.append(
+          button(
+            'Apply override',
+            async () => {
+              const result = await nodeAction('storage:save-node-model', {
+                nodeId,
+                name: binding?.name,
+                externalModelName: upstream.value.trim(),
+                nativeOverrideId: target.id,
+                displayName: target.displayName,
+                enabled: true,
+                reasoningEffort: binding?.reasoningEffort,
+              });
+              binding = {
+                ...binding,
+                name: result.name,
+                nodeId,
+                nativeOverrideId: target.id,
+                externalModelName: upstream.value.trim(),
+              } as CustomModelEntry;
+              await modelsChanged();
+              setStatus(status, `${target.displayName} → ${upstream.value.trim()}`);
+            },
+            status,
+          ),
+          button(
+            'Use Google',
+            async () => {
+              if (binding) await nodeAction('storage:delete-custom-model', binding.name);
+              binding = undefined;
+              upstream.value = '';
+              await modelsChanged();
+              setStatus(status, `Restored ${target.displayName}.`);
+            },
+            status,
+          ),
+        );
+        overrides.append(row);
+      }
+    } catch (error) {
+      setStatus(status, (error as Error).message, true);
+    }
+    search.addEventListener('input', render);
+    render();
+    try {
+      await fetchModels();
+    } catch (error) {
+      setStatus(status, `${(error as Error).message} You can still add a model ID manually.`, true);
+    }
+  }
+  async function openNodeModels(nodeId: string, existing?: CustomModelEntry): Promise<void> {
+    if (!existing) return openNodeModelPicker(nodeId);
+    const node = customNodes.find((n) => n.name === nodeId);
+    if (!node) throw new Error('Reload the custom node list first.');
+    const { body, status, close } = openModal(existing ? 'Edit node model' : `Models · ${node.displayName}`);
+    const label = field(body, 'Display name', 'agy-node-model-label', existing?.displayName || '');
+    const upstream = field(body, 'Upstream model ID', 'agy-node-model-id', existing?.externalModelName || '');
+    const modelOptions = element('datalist');
+    modelOptions.id = 'agy-node-model-options';
+    upstream.setAttribute('list', modelOptions.id);
+    body.append(modelOptions);
+    let targets: any[] = [];
+    try {
+      const result = await ipcRenderer.invoke('storage:get-native-gemini-models');
+      if (Array.isArray(result)) targets = result;
+    } catch (error) {
+      setStatus(status, (error as Error).message, true);
+    }
+    const override = selectField(
+      body,
+      'Model entry',
+      'agy-node-model-target',
+      [
+        ['', 'Add as an additional model'],
+        ...targets.map((target) => [target.id, `Override ${target.displayName}`] as [string, string]),
+      ],
+      String(existing?.nativeOverrideId || ''),
+    );
+    if (!targets.length)
+      body.append(
+        element(
+          'p',
+          'agy-muted',
+          'Open the native model picker once to cache the available Gemini models, then reopen this form to select an override.',
+        ),
+      );
+    const effort = selectField(
+      body,
+      'Reasoning effort',
+      'agy-node-model-effort',
+      [
+        ['', 'Provider default'],
+        ['low', 'Low'],
+        ['medium', 'Medium'],
+        ['high', 'High'],
+      ],
+      String(existing?.reasoningEffort || ''),
+    );
+    const enabled = selectField(
+      body,
+      'Model status',
+      'agy-node-model-enabled',
+      [
+        ['true', 'Enabled'],
+        ['false', 'Disabled'],
+      ],
+      String(existing?.enabled !== false),
+    );
+    body.append(
+      button(
+        'Fetch models from node',
+        async () => {
+          const result = await nodeAction('storage:discover-node-models', nodeId);
+          modelOptions.replaceChildren(
+            ...(result.models || []).map((model: ModelChoice) => {
+              const option = element('option');
+              option.value = model.id;
+              option.label = model.displayName || model.id;
+              return option;
+            }),
+          );
+          setStatus(
+            status,
+            `Fetched ${result.models?.length || 0} models. Select an upstream model ID or enter one manually.`,
+          );
+        },
+        status,
+      ),
+    );
+    body.append(
+      button(
+        'Save node model',
+        async () => {
+          await nodeAction('storage:save-node-model', {
+            nodeId,
+            name: existing?.name,
+            displayName: label.value.trim(),
+            externalModelName: upstream.value.trim(),
+            nativeOverrideId: override.value || undefined,
+            enabled: enabled.value === 'true',
+            reasoningEffort: effort.value || undefined,
+          });
+          close();
+          await modelsChanged();
+        },
+        status,
+        true,
+      ),
+    );
+    if (!existing) {
+      const models = modelList.filter((m) => m.nodeId === nodeId);
+      for (const model of models) {
+        const row = element('div', 'agy-model-row');
+        row.append(
+          element(
+            'span',
+            '',
+            `${model.displayName || model.externalModelName} · ${model.nativeOverrideId ? `Override ${model.nativeOverrideId}` : 'Additional model'}`,
+          ),
+          button('Edit', () => openNodeModels(nodeId, model), status),
+          button('Delete', () => openDeleteModelModal(model), status),
+        );
+        body.append(row);
+      }
+    }
+  }
+  function appendNodeGroups(content: DocumentFragment, models: CustomModelEntry[]): void {
+    for (const node of customNodes) {
+      const bindings = models.filter((m) => m.nodeId === node.name);
+      if (
+        searchTerm &&
+        !`${node.displayName} ${node.apiUrl} ${bindings.map((m) => `${m.displayName} ${m.externalModelName}`).join(' ')}`
+          .toLowerCase()
+          .includes(searchTerm)
+      )
+        continue;
+      const group = element('section', 'agy-group');
+      const heading = element('div', 'agy-group-heading');
+      const info = element('div');
+      info.append(
+        element(
+          'h3',
+          '',
+          `${node.displayName} · ${bindings.length} models${node.enabled === false ? ' · Disabled' : ''}`,
+        ),
+        element(
+          'div',
+          'agy-muted',
+          `${node.provider} · ${node.apiUrl}${node.toolProxy ? ' · Upstream tool API proxy' : ''}`,
+        ),
+      );
+      const status = statusNode();
+      const actions = element('div', 'agy-actions');
+      actions.append(
+        button('Models', () => openNodeModels(node.name), status),
+        button('Edit node', () => openNodeModal(node), status),
+      );
+      if (!bindings.length)
+        actions.append(
+          button(
+            'Delete node',
+            async () => {
+              await nodeAction('storage:delete-custom-node', node.name);
+              await modelsChanged();
+            },
+            status,
+          ),
+        );
+      heading.append(info, actions);
+      group.append(heading, status);
+      for (const model of bindings) {
+        const row = element('div', 'agy-model-row');
+        row.setAttribute('data-model-name', model.name);
+        row.append(
+          element(
+            'span',
+            '',
+            `${model.displayName || model.externalModelName} → ${model.externalModelName}${model.nativeOverrideId ? ` · Override ${model.nativeOverrideId}` : ''}${model.enabled === false ? ' · Disabled' : ''}`,
+          ),
+          button('Edit', () => openNodeModels(node.name, model), status),
+          button('Delete', () => openDeleteModelModal(model), status),
+        );
+        group.append(row);
+      }
+      content.append(group);
+    }
   }
 
   async function renderCustomModelsList(): Promise<void> {
@@ -1194,15 +1906,21 @@ window.addEventListener('DOMContentLoaded', () => {
     if (!target) return;
     const version = ++renderVersion;
     try {
-      const models = await storageAPI.getCustomModels();
+      const [models, nodes] = await Promise.all([
+        storageAPI.getCustomModels(),
+        ipcRenderer.invoke('storage:get-custom-nodes'),
+      ]);
+      customNodes = Array.isArray(nodes) ? nodes : [];
       if (version !== renderVersion || !target.isConnected) return;
       const restoreScroll = captureScrollPosition(target);
       modelList = models;
       renderGoogleFleet();
       void refreshFleetQuotas();
       const content = document.createDocumentFragment();
+      appendNodeGroups(content, models);
       const groups = new Map<string, CustomModelEntry[]>();
       for (const model of models) {
+        if (model.nodeId) continue;
         if (
           searchTerm &&
           !`${model.displayName} ${model.name} ${model.externalModelName} ${model.provider}`
@@ -1213,7 +1931,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const key = `${model.provider}\n${model.apiUrl}`;
         groups.set(key, [...(groups.get(key) || []), model]);
       }
-      if (!groups.size)
+      if (!groups.size && !customNodes.length)
         content.append(
           element(
             'p',
@@ -1262,9 +1980,16 @@ window.addEventListener('DOMContentLoaded', () => {
             element('strong', '', model.displayName || model.name),
             element('div', 'agy-muted', model.externalModelName),
           );
-          if (model.nativePickerAvailable === false) info.append(element('div', 'agy-muted',
-            typeof model.nativePickerError === 'string' ? model.nativePickerError :
-              'Not currently available in the native model picker. Direct API access remains available.'));
+          if (model.nativePickerAvailable === false)
+            info.append(
+              element(
+                'div',
+                'agy-muted',
+                typeof model.nativePickerError === 'string'
+                  ? model.nativePickerError
+                  : 'Not currently available in the native model picker. Direct API access remains available.',
+              ),
+            );
           const rowStatus = statusNode();
           info.append(rowStatus);
           const actions = element('div', 'agy-actions');
@@ -1396,13 +2121,32 @@ window.addEventListener('DOMContentLoaded', () => {
         'password',
       );
       apiKey.placeholder = preset().keyRequired ? 'Enter provider API key' : 'Optional for local servers';
-      const opencodeAuth = selectField(body, 'OpenCode authentication', 'agy-opencode-auth',
-        [['auth', 'API key'], ['noAuth', 'Keyless request']], existing?.apiKey && existing.apiKey !== 'none' ? 'auth' : 'noAuth');
-      const opencodeHint = element('p', 'agy-muted', 'OpenCode may restrict keyless free models to its own app. If the service rejects this client, add an API key or choose another model/provider.');
+      const opencodeAuth = selectField(
+        body,
+        'OpenCode authentication',
+        'agy-opencode-auth',
+        [
+          ['auth', 'API key'],
+          ['noAuth', 'Keyless request'],
+        ],
+        existing?.apiKey && existing.apiKey !== 'none' ? 'auth' : 'noAuth',
+      );
+      const opencodeHint = element(
+        'p',
+        'agy-muted',
+        'OpenCode may restrict keyless free models to its own app. If the service rejects this client, add an API key or choose another model/provider.',
+      );
       body.append(opencodeHint);
-      const isOpencode = () => ['opencode', 'zen'].includes(provider.value) || (() => {
-        try { const url = new URL(apiUrl.value); return url.origin === 'https://opencode.ai' && !/\/(?:zen|inference)\/go\//.test(url.pathname); } catch { return false; }
-      })();
+      const isOpencode = () =>
+        ['opencode', 'zen'].includes(provider.value) ||
+        (() => {
+          try {
+            const url = new URL(apiUrl.value);
+            return url.origin === 'https://opencode.ai' && !/\/(?:zen|inference)\/go\//.test(url.pathname);
+          } catch {
+            return false;
+          }
+        })();
       const keylessOpencode = () => isOpencode() && opencodeAuth.value === 'noAuth';
       const updateOpencodeAuth = () => {
         opencodeAuth.closest('label')!.hidden = !isOpencode();
@@ -1458,7 +2202,13 @@ window.addEventListener('DOMContentLoaded', () => {
         String(existing?.googleProject || ''),
       );
       const initialPool = existing?.googlePool as
-        | { strategy?: string; maxConcurrency?: number; cooldownMs?: number; preferredAccountId?: string; nativeFailoverEnabled?: boolean }
+        | {
+            strategy?: string;
+            maxConcurrency?: number;
+            cooldownMs?: number;
+            preferredAccountId?: string;
+            nativeFailoverEnabled?: boolean;
+          }
         | undefined;
       const poolGrid = element('div', 'agy-grid');
       const poolStrategy = selectField(
@@ -1487,10 +2237,24 @@ window.addEventListener('DOMContentLoaded', () => {
         String(initialPool?.cooldownMs || 60000),
         'number',
       );
-      const nativeFailover = selectField(poolGrid, 'Native Google request fallback', 'agy-google-native-failover',
-        [['false', 'Off'], ['true', 'Use this pool for matching native models']], String(initialPool?.nativeFailoverEnabled === true));
+      const nativeFailover = selectField(
+        poolGrid,
+        'Native Google request fallback',
+        'agy-google-native-failover',
+        [
+          ['false', 'Off'],
+          ['true', 'Use this pool for matching native models'],
+        ],
+        String(initialPool?.nativeFailoverEnabled === true),
+      );
       googleConfig.append(poolGrid);
-      googleConfig.append(element('p', 'agy-muted', 'Optional fallback uses this saved Google account pool only when a native request for the exact provider model fails. It does not change your signed-in IDE account.'));
+      googleConfig.append(
+        element(
+          'p',
+          'agy-muted',
+          'Optional fallback uses this saved Google account pool only when a native request for the exact provider model fails. It does not change your signed-in IDE account.',
+        ),
+      );
       const readAccounts = createGoogleAccountPanel(
         googleConfig,
         Array.isArray(existing?.googleAccounts) ? (existing.googleAccounts as GoogleAccountEntry[]) : [],
@@ -1565,12 +2329,20 @@ window.addEventListener('DOMContentLoaded', () => {
       compactionThreshold.min = '10';
       compactionThreshold.max = '90';
       compactionThreshold.placeholder = 'IDE default';
-      advancedGrid.append(element('p', 'agy-muted',
-        'Optional, 10–90% of the actual context window in new tokens since the previous checkpoint. Native counts may differ from provider totals. With many tools, start at 50%; higher values can trim older history before a full checkpoint. Leave blank for IDE defaults. The threshold is capped to reserve the model output limit plus 1,024 tokens. Set accurate context and output limits, then fully quit and reopen the IDE; the model cache may take an additional turn to refresh.',
-      ));
-      advancedGrid.append(element('p', 'agy-muted',
-        'IDE 2.5.5 needs at least 50,000 input tokens after those reserves. Its native picker may show a compatibility context, for example 90,000 for a real 85,000-token model. Your saved context and provider limit remain 85,000 in that example, and the custom checkpoint policy uses that real limit.',
-      ));
+      advancedGrid.append(
+        element(
+          'p',
+          'agy-muted',
+          'Optional, 10–90% of the actual context window in new tokens since the previous checkpoint. Native counts may differ from provider totals. With many tools, start at 50%; higher values can trim older history before a full checkpoint. Leave blank for IDE defaults. The threshold is capped to reserve the model output limit plus 1,024 tokens. Set accurate context and output limits, then fully quit and reopen the IDE; the model cache may take an additional turn to refresh.',
+        ),
+      );
+      advancedGrid.append(
+        element(
+          'p',
+          'agy-muted',
+          'IDE 2.5.5 needs at least 50,000 input tokens after those reserves. Its native picker may show a compatibility context, for example 90,000 for a real 85,000-token model. Your saved context and provider limit remain 85,000 in that example, and the custom checkpoint policy uses that real limit.',
+        ),
+      );
       const timeout = field(
         advancedGrid,
         'Request timeout (milliseconds)',
@@ -1627,7 +2399,24 @@ window.addEventListener('DOMContentLoaded', () => {
         ],
         String(existing?.enabled !== false),
       );
+      const toolProxy = selectField(
+        advancedGrid,
+        'Upstream tools (TokenNest)',
+        'agy-tool-proxy',
+        [
+          ['false', 'Use native Google routes'],
+          ['true', 'Use this endpoint and API key'],
+        ],
+        String(mode === 'edit' && existing?.toolProxy === true),
+      );
       advanced.append(advancedGrid);
+      advanced.append(
+        element(
+          'p',
+          'agy-muted',
+          'Choose one saved TokenNest connection for application-wide upstream tools. Search, citation redirects, page reading, images, transcription, embeddings and code scoring use the site tool channels and prices. Unavailable legacy RPCs return an error. Login, quota and telemetry retain their native routes. Selecting a new source replaces the previous one.',
+        ),
+      );
       const fallbacks = field(
         advanced,
         'Fallback model configuration names (comma separated)',
@@ -1719,7 +2508,9 @@ window.addEventListener('DOMContentLoaded', () => {
                 googleProject: googleProject.value.trim(),
                 googlePool: {
                   ...initialPool,
-                  preferredAccountId: readAccounts().some((account) => account.id === initialPool?.preferredAccountId) ? initialPool?.preferredAccountId : undefined,
+                  preferredAccountId: readAccounts().some((account) => account.id === initialPool?.preferredAccountId)
+                    ? initialPool?.preferredAccountId
+                    : undefined,
                   strategy: poolStrategy.value,
                   nativeFailoverEnabled: nativeFailover.value === 'true',
                   maxConcurrency: readNumber(poolConcurrency, 'Account concurrency', 1),
@@ -1756,6 +2547,7 @@ window.addEventListener('DOMContentLoaded', () => {
           displayName: title || id.trim(),
           description: description.value.trim(),
           enabled: enabled.value === 'true',
+          toolProxy: toolProxy.value === 'true',
           apiFormat: apiFormat.value,
           googleAccounts: provider.value === 'google-cloudcode' ? readAccounts() : undefined,
           googleProject: provider.value === 'google-cloudcode' ? googleProject.value.trim() || undefined : undefined,
@@ -1763,7 +2555,9 @@ window.addEventListener('DOMContentLoaded', () => {
             provider.value === 'google-cloudcode'
               ? {
                   ...initialPool,
-                  preferredAccountId: readAccounts().some((account) => account.id === initialPool?.preferredAccountId) ? initialPool?.preferredAccountId : undefined,
+                  preferredAccountId: readAccounts().some((account) => account.id === initialPool?.preferredAccountId)
+                    ? initialPool?.preferredAccountId
+                    : undefined,
                   strategy: poolStrategy.value,
                   nativeFailoverEnabled: nativeFailover.value === 'true',
                   maxConcurrency: readNumber(poolConcurrency, 'Account concurrency', 1),
@@ -2266,6 +3060,67 @@ window.addEventListener('DOMContentLoaded', () => {
       setStatus(status, String(error), true);
     }
   }
+  async function openRemoteAgent(projectId = ''): Promise<void> {
+    const { body, status, close } = openModal(projectId ? 'Edit SSH connection' : 'New SSH Project');
+    const invoke = async (operation: string, input?: unknown): Promise<any> => {
+      const result = await ipcRenderer.invoke('remote-acp:action', operation, input);
+      requireSuccess(result);
+      return result.result;
+    };
+    try {
+      const workspace = await invoke('workspace');
+      const saved = await invoke('config');
+      const project = workspace.projects.find((entry: any) => entry.id === projectId);
+      if (projectId && !project) throw new Error('SSH project no longer exists.');
+      const connection = project?.config || saved;
+      const name = field(body, 'Project name', 'agy-ssh-name', project?.name || '');
+      const host = field(body, 'SSH alias or user@host', 'agy-ssh-host', connection?.host || '');
+      const command = field(body, 'Remote acp-ssh absolute path', 'agy-ssh-command', connection?.command || '');
+      command.placeholder = '/home/your-user/.local/bin/acp-ssh';
+      const instance = field(body, 'ACP instance', 'agy-ssh-instance', connection?.instance || 'agy');
+      const cwd = field(body, 'Remote working directory', 'agy-ssh-cwd', connection?.cwd || '');
+      body.append(
+        element(
+          'p',
+          'agy-muted',
+          'Saved SSH projects appear in the existing project list. Open and manage their conversations in the normal Antigravity conversation page. SSH keys and known_hosts use your system configuration. For native swarm, save a separate project with ACP instance agy-swarm. Its members, message board and worker records appear in the same conversation; the remote instance controls its approval mode.',
+        ),
+      );
+      body.append(
+        button(
+          'Save SSH project',
+          async () => {
+            const config = {
+              host: host.value.trim(),
+              command: command.value.trim(),
+              instance: instance.value.trim(),
+              cwd: cwd.value.trim(),
+            };
+            await invoke('save', config);
+            const updated = await invoke('project-save', {
+              id: projectId || undefined,
+              name: name.value.trim(),
+              config,
+            });
+            close();
+            window.dispatchEvent(
+              new CustomEvent('agy-ssh-project-saved', {
+                detail: JSON.stringify({ projectId: updated.selectedProjectId, created: !projectId }),
+              }),
+            );
+          },
+          status,
+          true,
+        ),
+      );
+    } catch (error) {
+      setStatus(status, (error as Error).message, true);
+    }
+  }
+  window.addEventListener('agy-ssh-project-settings', (event) => {
+    const id = (event as CustomEvent).detail;
+    if (typeof id === 'string' && id.length <= 200) void openRemoteAgent(id);
+  });
   function findSettingsMount(): HTMLElement | null {
     // Desktop settings are a modal over /c/...; older layouts use a settings route.
     // A chat span saying "MCP" is not evidence that the settings page is open.
@@ -2320,9 +3175,14 @@ window.addEventListener('DOMContentLoaded', () => {
     section.id = 'agy-custom-models-section';
     section.setAttribute('aria-label', 'Custom Models');
     const header = element('div', 'agy-toolbar');
-    const addModel = button('Add model', () => openModelModal(), undefined, true);
+    const addModel = button('Add model', () => openModelModal());
+    addModel.title = 'Advanced standalone model configuration';
     addModel.id = 'agy-add-model';
-    header.append(element('h2', '', 'Custom Models'), addModel);
+    header.append(
+      element('h2', '', 'Custom Models'),
+      button('Add node', () => openNodeModal(), undefined, true),
+      addModel,
+    );
     const actions = element('div', 'agy-actions');
     actions.append(
       button('Discover local', discoverLocal),
@@ -2358,7 +3218,8 @@ window.addEventListener('DOMContentLoaded', () => {
   function pickerVisible(menu: HTMLElement): boolean {
     if (!menu.isConnected) return false;
     for (let node: HTMLElement | null = menu; node; node = node.parentElement) {
-      if (node.hidden || node.getAttribute('aria-hidden') === 'true' || node.getAttribute('data-state') === 'closed') return false;
+      if (node.hidden || node.getAttribute('aria-hidden') === 'true' || node.getAttribute('data-state') === 'closed')
+        return false;
       const style = window.getComputedStyle(node);
       if (style.display === 'none' || style.visibility === 'hidden') return false;
     }
@@ -2366,15 +3227,22 @@ window.addEventListener('DOMContentLoaded', () => {
   }
   function checkModelPickerSearch(): void {
     if (pickerSearch) {
-      if (pickerVisible(pickerSearch.menu)) { pickerSearch.update(); return; }
+      if (pickerVisible(pickerSearch.menu)) {
+        pickerSearch.update();
+        return;
+      }
       pickerSearch.cleanup();
       pickerSearch = undefined;
     }
     const menus = Array.from(document.querySelectorAll<HTMLElement>('[role="menu"], [role="listbox"]'));
     const menu = menus.find((candidate) => {
-      if (!pickerVisible(candidate) || candidate.closest('#agy-modal-overlay, #agy-custom-models-section') ||
-          candidate.parentElement?.closest('[role="menu"], [role="listbox"]') ||
-          candidate.matches('[data-radix-menu-sub-content], [data-radix-dropdown-menu-sub-content]')) return false;
+      if (
+        !pickerVisible(candidate) ||
+        candidate.closest('#agy-modal-overlay, #agy-custom-models-section') ||
+        candidate.parentElement?.closest('[role="menu"], [role="listbox"]') ||
+        candidate.matches('[data-radix-menu-sub-content], [data-radix-dropdown-menu-sub-content]')
+      )
+        return false;
       const trigger = document.getElementById(candidate.getAttribute('aria-labelledby') || '');
       if (trigger?.closest('[role="menuitem"], [role="menuitemradio"]')) return false;
       const leaves = Array.from(candidate.querySelectorAll<HTMLElement>('*')).filter((node) => !node.children.length);
@@ -2391,13 +3259,21 @@ window.addEventListener('DOMContentLoaded', () => {
     const empty = element('div', 'agy-model-no-results', 'No matching models');
     empty.hidden = true;
     box.append(input);
-    const header = Array.from(menu.querySelectorAll<HTMLElement>('*')).find((node) => !node.children.length && node.textContent?.trim() === 'Model');
+    const header = Array.from(menu.querySelectorAll<HTMLElement>('*')).find(
+      (node) => !node.children.length && node.textContent?.trim() === 'Model',
+    );
     (header || menu).insertAdjacentElement(header ? 'afterend' : 'afterbegin', box);
     box.after(empty);
     const displays = new Map<HTMLElement, { value: string; priority: string }>();
-    const items = () => Array.from(menu.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"], [role="option"], button'))
-      .filter((node) => !node.parentElement?.closest('[role="menuitem"], [role="menuitemradio"], [role="option"]') &&
-        !node.closest('.agy-model-search-box') && !/^View\s+Usage/i.test(node.textContent?.trim() || ''));
+    const items = () =>
+      Array.from(
+        menu.querySelectorAll<HTMLElement>('[role="menuitem"], [role="menuitemradio"], [role="option"], button'),
+      ).filter(
+        (node) =>
+          !node.parentElement?.closest('[role="menuitem"], [role="menuitemradio"], [role="option"]') &&
+          !node.closest('.agy-model-search-box') &&
+          !/^View\s+Usage/i.test(node.textContent?.trim() || ''),
+      );
     const restore = (node: HTMLElement) => {
       const old = displays.get(node);
       if (!old) return;
@@ -2410,9 +3286,14 @@ window.addEventListener('DOMContentLoaded', () => {
       let matches = 0;
       for (const node of items()) {
         const matched = !query || (node.textContent || '').toLowerCase().includes(query);
-        if (matched) { if (displays.has(node)) restore(node); if (pickerVisible(node)) matches++; }
-        else if (!displays.has(node)) {
-          displays.set(node, { value: node.style.getPropertyValue('display'), priority: node.style.getPropertyPriority('display') });
+        if (matched) {
+          if (displays.has(node)) restore(node);
+          if (pickerVisible(node)) matches++;
+        } else if (!displays.has(node)) {
+          displays.set(node, {
+            value: node.style.getPropertyValue('display'),
+            priority: node.style.getPropertyPriority('display'),
+          });
           node.style.setProperty('display', 'none', 'important');
         }
       }
@@ -2424,22 +3305,42 @@ window.addEventListener('DOMContentLoaded', () => {
     input.addEventListener('keydown', (event) => {
       if (event.key === 'Escape' && !input.value) return;
       event.stopPropagation();
-      if (event.key === 'Escape') { event.preventDefault(); input.value = ''; update(); }
-      else if (event.key === 'Enter' || event.key === 'ArrowDown') {
+      if (event.key === 'Escape') {
         event.preventDefault();
-        const first = items().find((node) => pickerVisible(node) && node.getAttribute('aria-disabled') !== 'true' && !(node as HTMLButtonElement).disabled);
+        input.value = '';
+        update();
+      } else if (event.key === 'Enter' || event.key === 'ArrowDown') {
+        event.preventDefault();
+        const first = items().find(
+          (node) =>
+            pickerVisible(node) &&
+            node.getAttribute('aria-disabled') !== 'true' &&
+            !(node as HTMLButtonElement).disabled,
+        );
         if (event.key === 'Enter') first?.click();
         else first?.focus();
       }
     });
-    pickerSearch = { menu, update, cleanup: () => { for (const node of displays.keys()) restore(node); box.remove(); empty.remove(); } };
-    setTimeout(() => { if (box.isConnected && pickerVisible(menu)) input.focus(); }, 0);
+    pickerSearch = {
+      menu,
+      update,
+      cleanup: () => {
+        for (const node of displays.keys()) restore(node);
+        box.remove();
+        empty.remove();
+      },
+    };
+    setTimeout(() => {
+      if (box.isConnected && pickerVisible(menu)) input.focus();
+    }, 0);
   }
   function setupInjectionObserver(): void {
     injectCustomModelsSection();
     if (!document.body) return;
     checkModelPickerSearch();
-    fleetTimer = setInterval(() => { void refreshFleetQuotas(); }, 30_000);
+    fleetTimer = setInterval(() => {
+      void refreshFleetQuotas();
+    }, 30_000);
     let pending: ReturnType<typeof setTimeout> | undefined;
     const observer = new MutationObserver(() => {
       if (pending) clearTimeout(pending);
@@ -2460,6 +3361,7 @@ window.addEventListener('DOMContentLoaded', () => {
       'pagehide',
       () => {
         observer.disconnect();
+        cancelModalOperation?.();
         if (pending) clearTimeout(pending);
         if (fleetTimer) clearInterval(fleetTimer);
       },
@@ -2485,40 +3387,70 @@ window.addEventListener('DOMContentLoaded', () => {
   const customModelsCache: { models: any[]; ts: number } = { models: [], ts: 0 };
 
   function injectMissingCustomModels(parsed: Record<string, unknown>, customModels: any[]): boolean {
-    const key = ['models', 'availableModels', 'available_models'].find((name) => parsed[name] !== undefined) || 'models';
+    const key =
+      ['models', 'availableModels', 'available_models'].find((name) => parsed[name] !== undefined) || 'models';
     const collection = parsed[key];
     // Preserve list/protocol shapes we do not own; the proxy handles array catalogs.
-    if (collection !== undefined && (!collection || typeof collection !== 'object' || Array.isArray(collection))) return false;
+    if (collection !== undefined && (!collection || typeof collection !== 'object' || Array.isArray(collection)))
+      return false;
     const modelsObj = (collection || {}) as Record<string, any>;
-    const legacySlug = (model: any) => 'custom-' + String(model.externalModelName || model.name || '')
-      .replace(/^models\//, '').replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').toLowerCase();
-    const usedLabels = new Set(Object.values(modelsObj).map((entry) => entry?.displayName).filter((label) => typeof label === 'string'));
+    const legacySlug = (model: any) =>
+      'custom-' +
+      String(model.externalModelName || model.name || '')
+        .replace(/^models\//, '')
+        .replace(/[^a-zA-Z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .toLowerCase();
+    const usedLabels = new Set(
+      Object.values(modelsObj)
+        .map((entry) => entry?.displayName)
+        .filter((label) => typeof label === 'string'),
+    );
     let changed = false;
     for (const model of customModels) {
-      if (model.nativePickerAvailable === false) continue;
+      if (
+        model.enabled === false ||
+        model.nodeEnabled === false ||
+        model.nativeOverrideId ||
+        model.nativePickerAvailable === false
+      )
+        continue;
       const authoritative = typeof model.nativeCatalogId === 'string' && typeof model.nativeModelId === 'string';
       const slug = authoritative ? model.nativeCatalogId : legacySlug(model);
       // Compatibility with older IPC: never guess a shared external alias for effort variants.
       if (!authoritative && customModels.filter((other) => legacySlug(other) === slug).length !== 1) continue;
-      const placeholder = authoritative ? model.nativeModelId : 'MODEL_PLACEHOLDER_M' +
-        (400 + hashCodeStr(String(model.displayName || model.name || 'custom-model').toLowerCase()) % 200);
+      const placeholder = authoritative
+        ? model.nativeModelId
+        : 'MODEL_PLACEHOLDER_M' +
+          (400 + (hashCodeStr(String(model.displayName || model.name || 'custom-model').toLowerCase()) % 200));
       const baseLabel = model.displayName || model.name;
       // The proxy is authoritative. Reinjection must not overwrite its capabilities or add a legacy duplicate.
-      if (Object.prototype.hasOwnProperty.call(modelsObj, slug) || Object.entries(modelsObj).some(([id, entry]) =>
-        id.startsWith('custom-') && entry?.model === placeholder && entry.displayName === baseLabel,
-      )) continue;
+      if (
+        Object.prototype.hasOwnProperty.call(modelsObj, slug) ||
+        Object.entries(modelsObj).some(
+          ([id, entry]) => id.startsWith('custom-') && entry?.model === placeholder && entry.displayName === baseLabel,
+        )
+      )
+        continue;
       let displayName = baseLabel;
-      if (usedLabels.has(displayName) || customModels.filter((entry) => (entry.displayName || entry.name) === baseLabel).length > 1)
+      if (
+        usedLabels.has(displayName) ||
+        customModels.filter((entry) => (entry.displayName || entry.name) === baseLabel).length > 1
+      )
         displayName = `${baseLabel} (${String(model.name).replace(/^models\//, '')})`;
       let suffix = 2;
-      while (usedLabels.has(displayName)) displayName = `${baseLabel} (${String(model.name).replace(/^models\//, '')} #${suffix++})`;
+      while (usedLabels.has(displayName))
+        displayName = `${baseLabel} (${String(model.name).replace(/^models\//, '')} #${suffix++})`;
       usedLabels.add(displayName);
       modelsObj[slug] = {
-        displayName, recommended: true,
+        displayName,
+        recommended: true,
         maxTokens: model.nativeContextWindow || model.contextWindow || 1048576,
         maxOutputTokens: model.nativeMaxOutputTokens || model.maxOutputTokens || 4096,
-        tokenizerType: 'LLAMA_WITH_SPECIAL', model: placeholder,
-        apiProvider: 'API_PROVIDER_GOOGLE_GEMINI', modelProvider: 'MODEL_PROVIDER_GOOGLE',
+        tokenizerType: 'LLAMA_WITH_SPECIAL',
+        model: placeholder,
+        apiProvider: 'API_PROVIDER_GOOGLE_GEMINI',
+        modelProvider: 'MODEL_PROVIDER_GOOGLE',
         ...(authoritative && model.nativeModelExperiments ? { modelExperiments: model.nativeModelExperiments } : {}),
       };
       changed = true;

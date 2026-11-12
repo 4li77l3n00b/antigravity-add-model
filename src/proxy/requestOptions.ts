@@ -58,11 +58,12 @@ export function isAntigravityCompactionRequest(body: GeminiBody): boolean {
 
 type CompactionEffort = NonNullable<CustomModel['compactionReasoningEffort']>;
 
-function applyCompactionEffort(
+function applyReasoningEffort(
   result: Record<string, unknown>,
   model: CustomModel,
   format: ApiFormat,
   effort: CompactionEffort,
+  compaction = false,
 ): void {
   // Remove competing provider knobs, including ones supplied via extraBody.
   const reasoning =
@@ -105,7 +106,7 @@ function applyCompactionEffort(
     }
   } else {
     const generation = { ...((result.generationConfig as Record<string, unknown>) || {}) };
-    if (model.gateway) {
+    if (model.gateway && compaction) {
       // Gateway aliases do not reveal the eventual provider. Preserve the
       // explicit compaction choice for its provider-specific mapping instead.
       delete generation.thinkingConfig;
@@ -234,7 +235,14 @@ export function applyRequestOptions(
       }
     }
   }
-  if (compactionEffort !== undefined) applyCompactionEffort(result, model, format, compactionEffort);
+  if (
+    compactionEffort === undefined &&
+    format === 'google' &&
+    model.reasoningEffort !== undefined &&
+    model.thinkingBudget === undefined
+  )
+    applyReasoningEffort(result, model, format, model.reasoningEffort);
+  if (compactionEffort !== undefined) applyReasoningEffort(result, model, format, compactionEffort, true);
   return result;
 }
 

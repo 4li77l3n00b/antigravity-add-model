@@ -60,6 +60,7 @@ async function fixture(
   await new Promise<void>((done) => dom.window.addEventListener('DOMContentLoaded', () => done(), { once: true }));
   let models = structuredClone(initialModels);
   const handlers: Record<string, (...args: any[]) => unknown> = {
+    'storage:get-custom-nodes': () => [],
     'storage:get-custom-models': () => structuredClone(models),
     'storage:get-provider-presets': () => presets,
     'storage:save-custom-model': (entry) => {
@@ -158,7 +159,7 @@ async function fixture(
     'storage:google-link-account': () => ({ success: true }),
     'storage:google-select-account': ({ modelName, accountId }) => {
       const entry = models.find((model) => model.name === modelName)!;
-      const pool = { ...(entry.googlePool as Record<string, unknown> || {}) };
+      const pool = { ...((entry.googlePool as Record<string, unknown>) || {}) };
       if (accountId) pool.preferredAccountId = accountId;
       else delete pool.preferredAccountId;
       entry.googlePool = pool;
@@ -166,7 +167,9 @@ async function fixture(
     },
     'storage:google-remove-account': ({ modelName, accountId }) => {
       const entry = models.find((model) => model.name === modelName)!;
-      const accounts = (entry.googleAccounts as { id: string; enabled?: boolean }[]).filter((account) => account.id !== accountId);
+      const accounts = (entry.googleAccounts as { id: string; enabled?: boolean }[]).filter(
+        (account) => account.id !== accountId,
+      );
       entry.googleAccounts = accounts;
       if (!accounts.some((account) => account.enabled !== false)) entry.enabled = false;
       const pool = entry.googlePool as { preferredAccountId?: string } | undefined;
@@ -291,8 +294,10 @@ describe('custom model settings in the preserved vendor preload', () => {
   });
 
   it('preserves document and nested scroll when deleting and focuses the adjacent surviving row without scrolling', async () => {
-    const f = await fixture('<div id="nested" style="overflow:auto"><section id="settings"><h2>Models &amp; Usage</h2></section></div>',
-      [model, { ...model, name: 'models/next', displayName: 'Next' }]);
+    const f = await fixture(
+      '<div id="nested" style="overflow:auto"><section id="settings"><h2>Models &amp; Usage</h2></section></div>',
+      [model, { ...model, name: 'models/next', displayName: 'Next' }],
+    );
     const nested = f.document.getElementById('nested')!;
     const documentScroll = f.document.documentElement;
     nested.scrollTop = 640;
@@ -325,7 +330,9 @@ describe('custom model settings in the preserved vendor preload', () => {
 
   it('restores cancel and final deletion focus without scrolling the page', async () => {
     const f = await fixture();
-    const removeButton = [...f.document.querySelectorAll<HTMLButtonElement>('button')].find((node) => node.textContent === 'Delete')!;
+    const removeButton = [...f.document.querySelectorAll<HTMLButtonElement>('button')].find(
+      (node) => node.textContent === 'Delete',
+    )!;
     removeButton.focus();
     const restoreFocus = vi.spyOn(removeButton, 'focus');
     await f.click('Delete');
@@ -339,10 +346,15 @@ describe('custom model settings in the preserved vendor preload', () => {
   });
 
   it('does not steal focus if the user moves to the native prompt while the model list refreshes', async () => {
-    const f = await fixture('<section id="settings"><h2>Models &amp; Usage</h2></section><textarea id="native-prompt"></textarea>');
+    const f = await fixture(
+      '<section id="settings"><h2>Models &amp; Usage</h2></section><textarea id="native-prompt"></textarea>',
+    );
     const read = f.handlers['storage:get-custom-models'];
     let finish!: () => void;
-    f.handlers['storage:get-custom-models'] = () => new Promise((resolve) => { finish = () => resolve(read()); });
+    f.handlers['storage:get-custom-models'] = () =>
+      new Promise((resolve) => {
+        finish = () => resolve(read());
+      });
     await f.click('Delete');
     await f.click('Delete model', f.document.querySelector('[role="dialog"]')!);
     const prompt = f.document.getElementById('native-prompt')!;
@@ -357,9 +369,10 @@ describe('custom model settings in the preserved vendor preload', () => {
     const f = await fixture();
     const remove = f.handlers['storage:delete-custom-model'];
     let finish!: () => void;
-    f.handlers['storage:delete-custom-model'] = (name) => new Promise((resolve) => {
-      finish = () => resolve(remove(name));
-    });
+    f.handlers['storage:delete-custom-model'] = (name) =>
+      new Promise((resolve) => {
+        finish = () => resolve(remove(name));
+      });
     await f.click('Delete');
     await f.click('Delete model', f.document.querySelector('[role="dialog"]')!);
     await f.click('Close', f.document.querySelector('[role="dialog"]')!);
@@ -460,10 +473,15 @@ describe('custom model settings in the preserved vendor preload', () => {
   });
 
   it('round-trips the optional native compaction threshold without changing model limits or effort', async () => {
-    const f = await fixture(undefined, [{
-      ...model, contextWindow: 85000, maxOutputTokens: 8192,
-      reasoningEffort: 'xhigh', compactionReasoningEffort: 'low',
-    }]);
+    const f = await fixture(undefined, [
+      {
+        ...model,
+        contextWindow: 85000,
+        maxOutputTokens: 8192,
+        reasoningEffort: 'xhigh',
+        compactionReasoningEffort: 'low',
+      },
+    ]);
     await f.click('Edit', f.document.getElementById('agy-custom-models-content')!);
     expect(f.input('agy-compaction-threshold').value).toBe('');
     expect(f.input('agy-compaction-threshold').min).toBe('10');
@@ -471,15 +489,22 @@ describe('custom model settings in the preserved vendor preload', () => {
     f.input('agy-compaction-threshold', '80');
     await f.click('Save model');
     expect(f.getModels()[0]).toMatchObject({
-      compactionThresholdPercent: 80, contextWindow: 85000, maxOutputTokens: 8192,
-      reasoningEffort: 'xhigh', compactionReasoningEffort: 'low',
+      compactionThresholdPercent: 80,
+      contextWindow: 85000,
+      maxOutputTokens: 8192,
+      reasoningEffort: 'xhigh',
+      compactionReasoningEffort: 'low',
     });
     await f.click('Edit', f.document.getElementById('agy-custom-models-content')!);
     expect(f.input('agy-compaction-threshold').value).toBe('80');
     f.input('agy-compaction-threshold', '');
     await f.click('Save model');
     expect(f.getModels()[0].compactionThresholdPercent).toBeUndefined();
-    expect(f.getModels()[0]).toMatchObject({ contextWindow: 85000, maxOutputTokens: 8192, compactionReasoningEffort: 'low' });
+    expect(f.getModels()[0]).toMatchObject({
+      contextWindow: 85000,
+      maxOutputTokens: 8192,
+      compactionReasoningEffort: 'low',
+    });
   });
 
   it.each(['9', '91', '50.5'])('rejects out-of-range or fractional native compaction thresholds: %s', async (value) => {
@@ -488,7 +513,9 @@ describe('custom model settings in the preserved vendor preload', () => {
     f.input('agy-compaction-threshold', value);
     await f.click('Save model');
     expect(f.invoke.mock.calls.filter(([channel]) => channel === 'storage:save-custom-model')).toHaveLength(0);
-    expect(f.document.querySelector('[role="dialog"]')!.textContent).toMatch(/IDE compaction threshold (?:must|cannot)/);
+    expect(f.document.querySelector('[role="dialog"]')!.textContent).toMatch(
+      /IDE compaction threshold (?:must|cannot)/,
+    );
   });
 
   it('requires the real context window before saving a native threshold', async () => {
@@ -622,6 +649,7 @@ describe('custom model settings in the preserved vendor preload', () => {
     f.input('agy-max-retries', '2');
     f.input('agy-vision', 'false');
     f.input('agy-raw-url', 'true');
+    f.input('agy-tool-proxy', 'true');
     f.input('agy-fallback-models', 'models/backup, models/local');
     f.input('agy-extra-body', '{"temperature":0.2}');
     await f.click('Save model');
@@ -632,6 +660,7 @@ describe('custom model settings in the preserved vendor preload', () => {
         originalName: 'models/primary',
         externalModelName: 'model-a-v2',
         apiKey: '********',
+        toolProxy: true,
         customHeaders: { 'X-Workspace': '********' },
         reasoningEffort: 'high',
         thinkingBudget: 2048,
@@ -1202,25 +1231,50 @@ describe('custom model settings in the preserved vendor preload', () => {
 });
 
 describe('Google fleet and native picker search', () => {
-  const pool = (name: string, id: string) => ({ ...model, name, provider:'google-cloudcode', googleAccounts:[{id,email:`${id}@example.com`,authMode:'antigravity'}] });
+  const pool = (name: string, id: string) => ({
+    ...model,
+    name,
+    provider: 'google-cloudcode',
+    googleAccounts: [{ id, email: `${id}@example.com`, authMode: 'antigravity' }],
+  });
   const member = (document: Document, modelName: string, id?: string) =>
-    [...document.querySelectorAll<HTMLElement>('.agy-fleet-pool')].find((node) =>
-      node.dataset.modelName === modelName && (!id || node.dataset.accountId === id))!;
+    [...document.querySelectorAll<HTMLElement>('.agy-fleet-pool')].find(
+      (node) => node.dataset.modelName === modelName && (!id || node.dataset.accountId === id),
+    )!;
   const card = (document: Document, email: string) =>
-    [...document.querySelectorAll<HTMLElement>('.agy-fleet-table tbody > tr')].find((node) =>
-      node.dataset.accountIdentity === email)!;
+    [...document.querySelectorAll<HTMLElement>('.agy-fleet-table tbody > tr')].find(
+      (node) => node.dataset.accountIdentity === email,
+    )!;
 
   it('keeps quota requests and visible measurements scoped to each project even for matching IDs', async () => {
-    const entries = ['one', 'two'].map((name) => ({ ...pool(`models/${name}`, 'shared'), googleAccounts: [{
-      id: 'shared', email: 'shared@example.com', project: `project-${name}`, authMode: 'antigravity',
-    }] }));
+    const entries = ['one', 'two'].map((name) => ({
+      ...pool(`models/${name}`, 'shared'),
+      googleAccounts: [
+        {
+          id: 'shared',
+          email: 'shared@example.com',
+          project: `project-${name}`,
+          authMode: 'antigravity',
+        },
+      ],
+    }));
     const f = await fixture(undefined, entries);
     f.invoke.mockClear();
-    f.handlers['storage:google-test-account'] = ({ modelName }) => ({ success: true, quota: {
-      email: 'shared@example.com', planTier: modelName === entries[0].name ? 'Pro' : undefined,
-      buckets: [{ id: 'weekly', groupName: 'Gemini Models', remainingFraction: modelName === entries[0].name ? 0.8 : 0,
-        resetTime: new Date(Date.now() + 7_200_000).toISOString() }],
-    } });
+    f.handlers['storage:google-test-account'] = ({ modelName }) => ({
+      success: true,
+      quota: {
+        email: 'shared@example.com',
+        planTier: modelName === entries[0].name ? 'Pro' : undefined,
+        buckets: [
+          {
+            id: 'weekly',
+            groupName: 'Gemini Models',
+            remainingFraction: modelName === entries[0].name ? 0.8 : 0,
+            resetTime: new Date(Date.now() + 7_200_000).toISOString(),
+          },
+        ],
+      },
+    });
     await f.click('Refresh quotas');
     expect(f.invoke.mock.calls.filter(([channel]) => channel === 'storage:google-test-account')).toHaveLength(2);
     for (const [index, entry] of entries.entries()) {
@@ -1237,30 +1291,51 @@ describe('Google fleet and native picker search', () => {
   });
 
   it('never changes a known account identity using another pool quota response', async () => {
-    const entries = ['one', 'two'].map((name) => ({ ...pool(`models/${name}`, 'shared'), googleAccounts: [{
-      id: 'shared', email: `${name}@example.com`, authMode: 'antigravity',
-    }] }));
+    const entries = ['one', 'two'].map((name) => ({
+      ...pool(`models/${name}`, 'shared'),
+      googleAccounts: [
+        {
+          id: 'shared',
+          email: `${name}@example.com`,
+          authMode: 'antigravity',
+        },
+      ],
+    }));
     const f = await fixture(undefined, entries);
-    f.handlers['storage:google-test-account'] = ({ modelName }) => ({ success: true, quota: {
-      email: `${modelName.split('/')[1]}@example.com`, buckets: [],
-    } });
+    f.handlers['storage:google-test-account'] = ({ modelName }) => ({
+      success: true,
+      quota: {
+        email: `${modelName.split('/')[1]}@example.com`,
+        buckets: [],
+      },
+    });
     await f.click('Refresh quotas');
     expect(f.document.querySelectorAll('.agy-fleet-card')).toHaveLength(2);
     expect(card(f.document, 'one@example.com')).toBeTruthy();
     expect(card(f.document, 'two@example.com')).toBeTruthy();
-    expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', { modelName: 'models/two', accountId: 'shared' });
+    expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', {
+      modelName: 'models/two',
+      accountId: 'shared',
+    });
   });
 
   it('keeps a model enabled through its other account and re-enables an empty disabled pool', async () => {
-    const entry = { ...pool('models/multi', 'first'), googleAccounts: [
-      { id: 'first', email: 'first@example.com', enabled: true, project: 'one' },
-      { id: 'second', email: 'second@example.com', enabled: true, project: 'two' },
-    ] };
+    const entry = {
+      ...pool('models/multi', 'first'),
+      googleAccounts: [
+        { id: 'first', email: 'first@example.com', enabled: true, project: 'one' },
+        { id: 'second', email: 'second@example.com', enabled: true, project: 'two' },
+      ],
+    };
     const f = await fixture(undefined, [entry]);
     await f.click('Disable account', card(f.document, 'first@example.com'));
-    expect(f.getModels()[0]).toMatchObject({ enabled: true, googleAccounts: [
-      { id: 'first', enabled: false, project: 'one' }, { id: 'second', enabled: true, project: 'two' },
-    ] });
+    expect(f.getModels()[0]).toMatchObject({
+      enabled: true,
+      googleAccounts: [
+        { id: 'first', enabled: false, project: 'one' },
+        { id: 'second', enabled: true, project: 'two' },
+      ],
+    });
     await f.click('Disable account', card(f.document, 'second@example.com'));
     expect(f.getModels()[0].enabled).toBe(false);
     await f.click('Enable account', card(f.document, 'first@example.com'));
@@ -1270,28 +1345,44 @@ describe('Google fleet and native picker search', () => {
 
   it('edits all verified account labels without copying credentials, projects, IDs or endpoints', async () => {
     const entries = ['one', 'two', 'three'].map((name, index) => ({
-      ...pool(`models/${name}`, index === 2 ? 'different-id' : 'shared-id'), googleAccounts: [{
-        id: index === 2 ? 'different-id' : 'shared-id', email: 'shared@example.com', label: name,
-        project: `project-${name}`, cloudCodeEndpoint: `https://${name}.example`, clientId: `client-${name}`,
-        refreshToken: `refresh-${name}`, accessToken: `access-${name}`, enabled: index !== 1,
-      }],
+      ...pool(`models/${name}`, index === 2 ? 'different-id' : 'shared-id'),
+      googleAccounts: [
+        {
+          id: index === 2 ? 'different-id' : 'shared-id',
+          email: 'shared@example.com',
+          label: name,
+          project: `project-${name}`,
+          cloudCodeEndpoint: `https://${name}.example`,
+          clientId: `client-${name}`,
+          refreshToken: `refresh-${name}`,
+          accessToken: `access-${name}`,
+          enabled: index !== 1,
+        },
+      ],
     }));
     const f = await fixture(undefined, entries);
     await f.click('Edit label', card(f.document, 'shared@example.com'));
     f.input('agy-fleet-account-label', 'New label');
     await f.click('Save account label', f.document.querySelector('[role="dialog"]')!);
-    expect(f.getModels()).toEqual(entries.map((entry) => ({
-      ...entry, googleAccounts: entry.googleAccounts.map((account) => ({ ...account, label: 'New label' })),
-    })));
+    expect(f.getModels()).toEqual(
+      entries.map((entry) => ({
+        ...entry,
+        googleAccounts: entry.googleAccounts.map((account) => ({ ...account, label: 'New label' })),
+      })),
+    );
     expect(card(f.document, 'shared@example.com').textContent).toContain('New label');
   });
 
   it('detaches the selected account memberships without deleting model definitions or other accounts', async () => {
     const entries = [
-      { ...pool('models/one', 'first'), googleAccounts: [
-        { id: 'first', email: 'shared@example.com' }, { id: 'same-email-second', email: 'shared@example.com' },
-        { id: 'standby', email: 'standby@example.com' },
-      ] },
+      {
+        ...pool('models/one', 'first'),
+        googleAccounts: [
+          { id: 'first', email: 'shared@example.com' },
+          { id: 'same-email-second', email: 'shared@example.com' },
+          { id: 'standby', email: 'standby@example.com' },
+        ],
+      },
       { ...pool('models/two', 'last'), googleAccounts: [{ id: 'last', email: 'shared@example.com' }] },
     ];
     const f = await fixture(undefined, entries);
@@ -1299,15 +1390,23 @@ describe('Google fleet and native picker search', () => {
     expect(f.invoke.mock.calls.filter(([channel]) => channel === 'storage:google-remove-account')).toHaveLength(0);
     await f.click('Remove from all pools', f.document.querySelector('[role="dialog"]')!);
     expect(f.getModels()).toHaveLength(2);
-    expect(f.getModels()[0]).toMatchObject({ enabled: true, googleAccounts: [{ id: 'standby', email: 'standby@example.com' }] });
+    expect(f.getModels()[0]).toMatchObject({
+      enabled: true,
+      googleAccounts: [{ id: 'standby', email: 'standby@example.com' }],
+    });
     expect(f.getModels()[1]).toMatchObject({ enabled: false, googleAccounts: [] });
     expect(f.invoke.mock.calls.some(([channel]) => channel === 'storage:delete-custom-model')).toBe(false);
   });
 
   it('reflects stored preference after A to B to A and clears it explicitly', async () => {
-    const entry = { ...pool('models/preferred "quoted"', 'first'), googlePool: { preferredAccountId: 'first' }, googleAccounts: [
-      { id: 'first', email: 'first@example.com' }, { id: 'second', email: 'second@example.com' },
-    ] };
+    const entry = {
+      ...pool('models/preferred "quoted"', 'first'),
+      googlePool: { preferredAccountId: 'first' },
+      googleAccounts: [
+        { id: 'first', email: 'first@example.com' },
+        { id: 'second', email: 'second@example.com' },
+      ],
+    };
     const f = await fixture(undefined, [entry]);
     await f.click('Use preferred', member(f.document, entry.name, 'second'));
     await f.click('Use preferred', member(f.document, entry.name, 'first'));
@@ -1330,10 +1429,13 @@ describe('Google fleet and native picker search', () => {
   });
 
   it('blocks stale model, group and editor actions until a fleet save and reload finish', async () => {
-    const entry = { ...pool('models/race', 'first'), googleAccounts: [
-      { id: 'first', email: 'first@example.com', enabled: true },
-      { id: 'standby', email: 'standby@example.com', enabled: true },
-    ] };
+    const entry = {
+      ...pool('models/race', 'first'),
+      googleAccounts: [
+        { id: 'first', email: 'first@example.com', enabled: true },
+        { id: 'standby', email: 'standby@example.com', enabled: true },
+      ],
+    };
     const f = await fixture(undefined, [entry]);
     const content = f.document.getElementById('agy-custom-models-content')!;
     const controls = [...content.querySelectorAll<HTMLButtonElement>('button')];
@@ -1344,7 +1446,9 @@ describe('Google fleet and native picker search', () => {
     let finishSave!: () => void;
     f.handlers['storage:save-custom-model'] = (record) => {
       const result = save(record); // The main process has saved, but its reply is still pending.
-      return new Promise((resolve) => { finishSave = () => resolve(result); });
+      return new Promise((resolve) => {
+        finishSave = () => resolve(result);
+      });
     };
     await f.click('Disable account', card(f.document, 'first@example.com'));
     for (const control of [modelDisable, groupDisable, edit]) {
@@ -1353,15 +1457,20 @@ describe('Google fleet and native picker search', () => {
     }
     expect(f.document.querySelector('[role="dialog"]')).toBeNull();
     expect(f.invoke.mock.calls.filter(([channel]) => channel === 'storage:save-custom-model')).toHaveLength(1);
-    expect(f.getModels()[0]).toMatchObject({ enabled: true, googleAccounts: [
-      { id: 'first', enabled: false }, { id: 'standby', enabled: true },
-    ] });
+    expect(f.getModels()[0]).toMatchObject({
+      enabled: true,
+      googleAccounts: [
+        { id: 'first', enabled: false },
+        { id: 'standby', enabled: true },
+      ],
+    });
 
     const read = f.handlers['storage:get-custom-models'];
     let finishReload!: () => void;
-    f.handlers['storage:get-custom-models'] = () => new Promise((resolve) => {
-      finishReload = () => resolve(read());
-    });
+    f.handlers['storage:get-custom-models'] = () =>
+      new Promise((resolve) => {
+        finishReload = () => resolve(read());
+      });
     finishSave();
     await settle();
     expect(modelDisable.disabled).toBe(true);
@@ -1374,15 +1483,21 @@ describe('Google fleet and native picker search', () => {
 
     // After reload, the model action uses its new record and retains A's disabled state.
     await f.click('Disable', f.document.getElementById('agy-custom-models-content')!);
-    expect(f.getModels()[0]).toMatchObject({ enabled: false, googleAccounts: [
-      { id: 'first', enabled: false }, { id: 'standby', enabled: true },
-    ] });
+    expect(f.getModels()[0]).toMatchObject({
+      enabled: false,
+      googleAccounts: [
+        { id: 'first', enabled: false },
+        { id: 'standby', enabled: true },
+      ],
+    });
     expect(f.invoke.mock.calls.filter(([channel]) => channel === 'storage:save-custom-model')).toHaveLength(2);
   });
 
   it('preserves nested and document scroll throughout a persisted account change', async () => {
-    const f = await fixture('<div id="nested" style="overflow:auto"><section id="settings"><h2>Models &amp; Usage</h2></section></div>',
-      [pool('models/scroll', 'first')]);
+    const f = await fixture(
+      '<div id="nested" style="overflow:auto"><section id="settings"><h2>Models &amp; Usage</h2></section></div>',
+      [pool('models/scroll', 'first')],
+    );
     const nested = f.document.getElementById('nested')!;
     nested.scrollTop = 520;
     nested.scrollLeft = 18;
@@ -1413,10 +1528,15 @@ describe('Google fleet and native picker search', () => {
     expect(f.dom.window.localStorage.getItem('agy_google_fleet_collapsed')).toBe('true');
     expect(f.document.getElementById('agy-fleet-details')!.hidden).toBe(true);
     let finish!: (value: unknown) => void;
-    f.handlers['storage:google-test-account'] = () => new Promise((resolve) => { finish = resolve; });
+    f.handlers['storage:google-test-account'] = () =>
+      new Promise((resolve) => {
+        finish = resolve;
+      });
     await f.click('Refresh quotas');
     expect((f.document.getElementById('agy-fleet-refresh') as HTMLButtonElement).disabled).toBe(true);
-    expect(f.document.getElementById('agy-google-account-pool-section')!.textContent).toContain('Checking each model pool');
+    expect(f.document.getElementById('agy-google-account-pool-section')!.textContent).toContain(
+      'Checking each model pool',
+    );
     f.handlers['storage:google-test-account'] = () => ({ success: true, quota: { buckets: [] } });
     finish({ success: true, quota: { buckets: [] } });
     await settle();
@@ -1427,7 +1547,10 @@ describe('Google fleet and native picker search', () => {
 
   it('toggles native fallback without replacing individual pool strategy or project settings', async () => {
     const entries = [
-      { ...pool('models/one', 'first'), googlePool: { strategy: 'quota', preferredAccountId: 'first', nativeFailoverEnabled: true } },
+      {
+        ...pool('models/one', 'first'),
+        googlePool: { strategy: 'quota', preferredAccountId: 'first', nativeFailoverEnabled: true },
+      },
       { ...pool('models/two', 'second'), googlePool: { strategy: 'round-robin', nativeFailoverEnabled: false } },
     ];
     const f = await fixture(undefined, entries);
@@ -1436,59 +1559,120 @@ describe('Google fleet and native picker search', () => {
     toggle.checked = false;
     toggle.dispatchEvent(new f.dom.window.Event('change'));
     await settle();
-    expect(f.getModels()).toEqual(entries.map((entry) => ({ ...entry, googlePool: { ...entry.googlePool, nativeFailoverEnabled: false } })));
+    expect(f.getModels()).toEqual(
+      entries.map((entry) => ({ ...entry, googlePool: { ...entry.googlePool, nativeFailoverEnabled: false } })),
+    );
   });
   it('groups a shared email once while preserving every model account, quota and action scope', async () => {
-    const first = { ...pool('models/one', 'first-id'), displayName: 'First pool', googleAccounts: [
-      { id: 'first-id', email: ' Shared@Example.com ', authMode: 'antigravity', project: 'project-one', cloudCodeEndpoint: 'https://one.example' },
-    ] };
-    const second = { ...pool('models/two', 'second-id'), displayName: 'Second pool', googlePool: { preferredAccountId: 'second-id' }, googleAccounts: [
-      { id: 'second-id', email: 'shared@example.com', authMode: 'antigravity', project: 'project-two', cloudCodeEndpoint: 'https://two.example' },
-    ] };
+    const first = {
+      ...pool('models/one', 'first-id'),
+      displayName: 'First pool',
+      googleAccounts: [
+        {
+          id: 'first-id',
+          email: ' Shared@Example.com ',
+          authMode: 'antigravity',
+          project: 'project-one',
+          cloudCodeEndpoint: 'https://one.example',
+        },
+      ],
+    };
+    const second = {
+      ...pool('models/two', 'second-id'),
+      displayName: 'Second pool',
+      googlePool: { preferredAccountId: 'second-id' },
+      googleAccounts: [
+        {
+          id: 'second-id',
+          email: 'shared@example.com',
+          authMode: 'antigravity',
+          project: 'project-two',
+          cloudCodeEndpoint: 'https://two.example',
+        },
+      ],
+    };
     const f = await fixture(undefined, [first, second]);
-    f.handlers['storage:google-test-account'] = ({ modelName }) => ({ success: true, quota: {
-      buckets: [{ id: modelName === first.name ? 'gemini' : 'claude', remainingFraction: modelName === first.name ? 0.2 : 0.8 }],
-    } });
+    f.handlers['storage:google-test-account'] = ({ modelName }) => ({
+      success: true,
+      quota: {
+        buckets: [
+          {
+            id: modelName === first.name ? 'gemini' : 'claude',
+            remainingFraction: modelName === first.name ? 0.2 : 0.8,
+          },
+        ],
+      },
+    });
     await f.click('Refresh quotas');
     const fleet = f.document.getElementById('agy-google-account-pool-section')!;
     expect(fleet.querySelectorAll('tbody > tr')).toHaveLength(1);
     expect(fleet.textContent).toContain('Google account fleet · 1 account');
     expect(fleet.textContent).toContain('2 model pools');
-    const member = (name: string) => [...fleet.querySelectorAll<HTMLElement>('.agy-fleet-pool')].find((node) => node.dataset.modelName === name)!;
+    const member = (name: string) =>
+      [...fleet.querySelectorAll<HTMLElement>('.agy-fleet-pool')].find((node) => node.dataset.modelName === name)!;
     expect(member(first.name).textContent).toContain('project-one');
     expect(member(second.name).textContent).toContain('project-two');
     expect(member(first.name).querySelector('progress')?.value).toBe(0.2);
     expect(member(second.name).querySelector('progress')?.value).toBe(0.8);
     expect(member(first.name).querySelector('.agy-pool-badge')?.textContent).toBe('Automatic');
     expect(member(second.name).querySelector('.agy-pool-badge')?.textContent).toBe('Preferred');
-    expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', { modelName: first.name, accountId: 'first-id' });
-    expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', { modelName: second.name, accountId: 'second-id' });
+    expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', {
+      modelName: first.name,
+      accountId: 'first-id',
+    });
+    expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', {
+      modelName: second.name,
+      accountId: 'second-id',
+    });
     await f.click('Automatic', member(second.name));
     expect(f.invoke).toHaveBeenCalledWith('storage:google-select-account', { modelName: second.name });
     await f.click('Reconnect', member(second.name));
-    await vi.waitFor(() => expect(f.invoke).toHaveBeenCalledWith('storage:google-link-account', {
-      modelName: second.name, accountId: 'pending-account', replaceAccountId: 'second-id',
-    }));
+    await vi.waitFor(() =>
+      expect(f.invoke).toHaveBeenCalledWith('storage:google-link-account', {
+        modelName: second.name,
+        accountId: 'pending-account',
+        replaceAccountId: 'second-id',
+      }),
+    );
     await f.click('Remove', member(first.name));
     expect(f.document.querySelector('[role="dialog"]')?.textContent).toContain('from models/one');
     await f.click('Remove account', f.document.querySelector('[role="dialog"]')!);
-    expect(f.invoke).toHaveBeenCalledWith('storage:google-remove-account', { modelName: first.name, accountId: 'first-id' });
-    expect(f.invoke).not.toHaveBeenCalledWith('storage:google-remove-account', { modelName: second.name, accountId: 'first-id' });
+    expect(f.invoke).toHaveBeenCalledWith('storage:google-remove-account', {
+      modelName: first.name,
+      accountId: 'first-id',
+    });
+    expect(f.invoke).not.toHaveBeenCalledWith('storage:google-remove-account', {
+      modelName: second.name,
+      accountId: 'first-id',
+    });
   });
 
   it('keeps distinct known emails separate even when their account IDs match', async () => {
-    const f = await fixture(undefined, ['one', 'two'].map((name) => ({ ...pool(`models/${name}`, 'same-id'),
-      googleAccounts: [{ id: 'same-id', email: `${name}@example.com`, authMode: 'antigravity' }],
-    })));
+    const f = await fixture(
+      undefined,
+      ['one', 'two'].map((name) => ({
+        ...pool(`models/${name}`, 'same-id'),
+        googleAccounts: [{ id: 'same-id', email: `${name}@example.com`, authMode: 'antigravity' }],
+      })),
+    );
     expect(f.document.querySelectorAll('.agy-fleet-table tbody > tr')).toHaveLength(2);
   });
 
   it('keeps unknown identities separate until quota verifies a shared email', async () => {
-    const f = await fixture(undefined, ['one', 'two', 'three'].map((name) => ({ ...pool(`models/${name}`, 'unused'),
-      googleAccounts: [{ id: name === 'three' ? 'third-id' : 'shared-id', label: 'Account', authMode: 'antigravity' }],
-    })));
+    const f = await fixture(
+      undefined,
+      ['one', 'two', 'three'].map((name) => ({
+        ...pool(`models/${name}`, 'unused'),
+        googleAccounts: [
+          { id: name === 'three' ? 'third-id' : 'shared-id', label: 'Account', authMode: 'antigravity' },
+        ],
+      })),
+    );
     expect(f.document.querySelectorAll('.agy-fleet-table tbody > tr')).toHaveLength(3);
-    f.handlers['storage:google-test-account'] = () => ({ success: true, quota: { email: 'verified@example.com', buckets: [] } });
+    f.handlers['storage:google-test-account'] = () => ({
+      success: true,
+      quota: { email: 'verified@example.com', buckets: [] },
+    });
     await f.click('Refresh quotas');
     expect(f.document.querySelectorAll('.agy-fleet-table tbody > tr')).toHaveLength(1);
     expect(f.document.querySelectorAll('.agy-fleet-pool')).toHaveLength(3);
@@ -1497,67 +1681,214 @@ describe('Google fleet and native picker search', () => {
   });
 
   it('clears a deleted preference when editing an account pool', async () => {
-    const configured = { ...pool('models/edit-pool', 'primary'), googlePool: { preferredAccountId: 'primary' }, googleAccounts: [
-      { id: 'primary', accessToken: '********', authMode: 'antigravity' },
-      { id: 'standby', accessToken: '********', authMode: 'antigravity' },
-    ] };
+    const configured = {
+      ...pool('models/edit-pool', 'primary'),
+      googlePool: { preferredAccountId: 'primary' },
+      googleAccounts: [
+        { id: 'primary', accessToken: '********', authMode: 'antigravity' },
+        { id: 'standby', accessToken: '********', authMode: 'antigravity' },
+      ],
+    };
     const f = await fixture(undefined, [configured]);
     await f.click('Edit', f.document.getElementById('agy-custom-models-content')!);
     await f.click('Remove account');
     await f.click('Save model');
     const saved = f.getModels()[0];
     expect((saved.googlePool as { preferredAccountId?: string }).preferredAccountId).toBeUndefined();
-    expect((saved.googleAccounts as { id: string }[]).map(value => value.id)).toEqual(['standby']);
+    expect((saved.googleAccounts as { id: string }[]).map((value) => value.id)).toEqual(['standby']);
   });
   it('queries each account through its owner model and displays missing/error quota honestly', async () => {
-    const f = await fixture(undefined, [pool('models/one','account-one'), pool('models/two','account-two')]);
-    await vi.waitFor(() => expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', {modelName:'models/two',accountId:'account-two'}));
+    const f = await fixture(undefined, [pool('models/one', 'account-one'), pool('models/two', 'account-two')]);
+    await vi.waitFor(() =>
+      expect(f.invoke).toHaveBeenCalledWith('storage:google-test-account', {
+        modelName: 'models/two',
+        accountId: 'account-two',
+      }),
+    );
     const fleet = f.document.getElementById('agy-google-account-pool-section')!;
     expect(fleet.textContent).toContain('Quota unavailable');
     expect(fleet.textContent).not.toContain('100%');
-    f.handlers['storage:google-test-account'] = () => ({success:false,error:'Quota request denied'});
+    f.handlers['storage:google-test-account'] = () => ({ success: false, error: 'Quota request denied' });
     await f.click('Refresh quotas');
     expect(fleet.textContent).toContain('Quota request denied');
     expect(fleet.textContent).not.toContain('100%');
   });
   it('uses backend preference, reconnect and confirmed deletion actions without masked save loops', async () => {
-    const f = await fixture(undefined, [pool('models/one','saved-account')]);
+    const f = await fixture(undefined, [pool('models/one', 'saved-account')]);
     await f.click('Use preferred');
-    expect(f.invoke).toHaveBeenCalledWith('storage:google-select-account',{modelName:'models/one',accountId:'saved-account'});
+    expect(f.invoke).toHaveBeenCalledWith('storage:google-select-account', {
+      modelName: 'models/one',
+      accountId: 'saved-account',
+    });
     await f.click('Reconnect');
-    await vi.waitFor(() => expect(f.invoke).toHaveBeenCalledWith('storage:google-link-account',{modelName:'models/one',accountId:'pending-account',replaceAccountId:'saved-account'}));
+    await vi.waitFor(() =>
+      expect(f.invoke).toHaveBeenCalledWith('storage:google-link-account', {
+        modelName: 'models/one',
+        accountId: 'pending-account',
+        replaceAccountId: 'saved-account',
+      }),
+    );
     expect(f.invoke.mock.calls.some(([channel]) => channel === 'storage:save-custom-model')).toBe(false);
     await f.click('Remove');
     expect(f.invoke.mock.calls.some(([channel]) => channel === 'storage:google-remove-account')).toBe(false);
     await f.click('Remove account');
-    expect(f.invoke).toHaveBeenCalledWith('storage:google-remove-account',{modelName:'models/one',accountId:'saved-account'});
+    expect(f.invoke).toHaveBeenCalledWith('storage:google-remove-account', {
+      modelName: 'models/one',
+      accountId: 'saved-account',
+    });
   });
   it('filters picker rows, preserves vendor-hidden items, restores on close and reopens cleanly', async () => {
     const f = await fixture();
     const menu = f.document.createElement('div');
-    menu.setAttribute('role','menu');
-    menu.setAttribute('data-state','open');
-    menu.innerHTML='<div>Model</div><button role="menuitem" data-model="gemini">Gemini</button><button role="menuitem" data-model="claude">Claude</button><button role="menuitem" style="display:none">Retired model</button><button role="menuitem">View Usage</button>';
+    menu.setAttribute('role', 'menu');
+    menu.setAttribute('data-state', 'open');
+    menu.innerHTML =
+      '<div>Model</div><button role="menuitem" data-model="gemini">Gemini</button><button role="menuitem" data-model="claude">Claude</button><button role="menuitem" style="display:none">Retired model</button><button role="menuitem">View Usage</button>';
     f.document.body.append(menu);
     await vi.waitFor(() => expect(menu.querySelector('.agy-model-search-input')).toBeTruthy());
     const input = menu.querySelector<HTMLInputElement>('.agy-model-search-input')!;
-    input.value='claude'; input.dispatchEvent(new f.dom.window.Event('input'));
+    input.value = 'claude';
+    input.dispatchEvent(new f.dom.window.Event('input'));
     expect(menu.querySelector<HTMLElement>('[data-model="gemini"]')?.style.display).toBe('none');
-    let clicked=false; menu.querySelector('[data-model="claude"]')!.addEventListener('click',()=>{clicked=true});
-    input.dispatchEvent(new f.dom.window.KeyboardEvent('keydown',{key:'Enter',bubbles:true}));
+    let clicked = false;
+    menu.querySelector('[data-model="claude"]')!.addEventListener('click', () => {
+      clicked = true;
+    });
+    input.dispatchEvent(new f.dom.window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true }));
     expect(clicked).toBe(true);
-    menu.setAttribute('data-state','closed');
+    menu.setAttribute('data-state', 'closed');
     await vi.waitFor(() => expect(menu.querySelector('.agy-model-search-input')).toBeNull());
     expect(menu.querySelector<HTMLElement>('[data-model="gemini"]')?.style.display).toBe('');
-    expect([...menu.querySelectorAll('button')].find(node=>node.textContent==='Retired model')?.style.display).toBe('none');
-    menu.setAttribute('data-state','open');
+    expect(
+      [...menu.querySelectorAll('button')].find((node) => node.textContent === 'Retired model')?.style.display,
+    ).toBe('none');
+    menu.setAttribute('data-state', 'open');
     await vi.waitFor(() => expect(menu.querySelector<HTMLInputElement>('.agy-model-search-input')?.value).toBe(''));
   });
   it('does not inject search into a usage submenu', async () => {
-    const f=await fixture();
-    const submenu=f.document.createElement('div'); submenu.setAttribute('role','menu'); submenu.setAttribute('data-radix-menu-sub-content','');
-    submenu.innerHTML='<span>Model</span><button>Gemini</button><button>View Usage</button>';
-    f.document.body.append(submenu); await new Promise(done=>setTimeout(done,250));
+    const f = await fixture();
+    const submenu = f.document.createElement('div');
+    submenu.setAttribute('role', 'menu');
+    submenu.setAttribute('data-radix-menu-sub-content', '');
+    submenu.innerHTML = '<span>Model</span><button>Gemini</button><button>View Usage</button>';
+    f.document.body.append(submenu);
+    await new Promise((done) => setTimeout(done, 250));
     expect(submenu.querySelector('.agy-model-search-input')).toBeNull();
+  });
+});
+
+describe('SSH project settings', () => {
+  it('keeps SSH out of model settings and opens the native project action', async () => {
+    const f = await fixture('<main>Native projects</main>', [], 'http://127.0.0.1:54321/');
+    f.handlers['remote-acp:action'] = async (operation: string) => ({
+      success: true,
+      result: operation === 'workspace' ? { projects: [], sessions: [] } : operation === 'config' ? {} : {},
+    });
+    expect(f.document.getElementById('agy-new-ssh-project')).toBeNull();
+    expect(f.document.body.textContent).not.toContain('SSH projects');
+    f.dom.window.dispatchEvent(new f.dom.window.CustomEvent('agy-ssh-project-settings', { detail: '' }));
+    await settle();
+    expect(f.document.querySelector('#agy-ssh-host')).not.toBeNull();
+    expect(f.document.getElementById('agy-manager-style')).not.toBeNull();
+    expect(f.document.getElementById('agy-ssh-project')).toBeNull();
+  });
+  it('saves a project for the native project and conversation pages without rendering another chat', async () => {
+    const f = await fixture();
+    const config = {
+      host: 'developer@host.example',
+      command: '/home/developer/.local/bin/acp-ssh',
+      instance: 'agy',
+      cwd: '/home/developer/project',
+    };
+    const remote = vi.fn(async (operation: string) => ({
+      success: true,
+      result: operation === 'workspace' ? { projects: [], sessions: [] } : operation === 'config' ? config : {},
+    }));
+    f.handlers['remote-acp:action'] = remote;
+    expect(f.document.getElementById('agy-remote-launcher')).toBeNull();
+    f.dom.window.dispatchEvent(new f.dom.window.CustomEvent('agy-ssh-project-settings', { detail: '' }));
+    await settle();
+    f.input('agy-ssh-name', 'maichart');
+    expect(f.document.getElementById('agy-ssh-prompt')).toBeNull();
+    await f.click('Save SSH project');
+    expect(remote).toHaveBeenCalledWith('project-save', { id: undefined, name: 'maichart', config });
+    expect(remote).not.toHaveBeenCalledWith('rpc', expect.anything());
+  });
+});
+
+describe('connection-first custom node UI', () => {
+  it('auto-discovers, searches and adds several models while keeping manual entry available', async () => {
+    const f = await fixture(undefined, []);
+    f.handlers['storage:get-custom-nodes'] = () => [{ ...model, name: 'node', displayName: 'Node' }];
+    f.handlers['storage:save-custom-node'] = () => ({ success: true, name: 'node' });
+    f.handlers['storage:get-native-gemini-models'] = () => [];
+    const discover = vi.fn(async () => ({ success: true, models: [{ id: 'one' }, { id: 'two' }, { id: 'other' }] }));
+    f.handlers['storage:discover-node-models'] = discover;
+    const saved: any[] = [];
+    f.handlers['storage:save-node-model'] = async (input) => {
+      saved.push(input);
+      return { success: true, name: input.externalModelName };
+    };
+    await f.click('Add node');
+    f.input('agy-node-name', 'Node');
+    f.input('agy-node-url', 'https://node.example/v1');
+    await f.click('Save node');
+    expect(discover).toHaveBeenCalledTimes(1);
+    f.input('agy-node-model-search', 'o');
+    await f.click('Select visible');
+    await f.click('Add selected models');
+    expect(saved.map((entry) => entry.externalModelName)).toEqual(['one', 'two', 'other']);
+    await f.click('Add selected models');
+    expect(saved).toHaveLength(3);
+    f.input('agy-node-manual-id', 'manual');
+    await f.click('Add manual model');
+    expect(saved.at(-1)).toMatchObject({ nodeId: 'node', externalModelName: 'manual' });
+    expect(f.document.querySelector('#agy-node-model-search')).not.toBeNull();
+  });
+
+  it('saves the connection and tool proxy before binding an offered model to a native Gemini entry', async () => {
+    const f = await fixture(undefined, []);
+    let nodes: any[] = [];
+    const saveNode = vi.fn(async (input: any) => {
+      nodes = [{ ...input, name: 'models/node-test' }];
+      return { success: true, name: 'models/node-test' };
+    });
+    f.handlers['storage:get-custom-nodes'] = () => nodes;
+    f.handlers['storage:save-custom-node'] = saveNode;
+    f.handlers['storage:get-native-gemini-models'] = () => [
+      { id: 'gemini-native', displayName: 'Gemini Native', model: 1020 },
+    ];
+    f.handlers['storage:discover-node-models'] = () => ({
+      success: true,
+      models: [{ id: 'gemini-4-carbon', displayName: 'Carbon' }],
+    });
+    const saveModel = vi.fn(async () => ({ success: true }));
+    f.handlers['storage:save-node-model'] = saveModel;
+    await f.click('Add node');
+    f.input('agy-node-name', 'My endpoint');
+    f.input('agy-node-url', 'https://node.example/v1');
+    f.input('agy-node-key', 'key-test');
+    f.input('agy-node-tools').value = 'true';
+    await f.click('Save node');
+    expect(saveNode).toHaveBeenCalledWith(
+      expect.objectContaining({
+        displayName: 'My endpoint',
+        apiUrl: 'https://node.example/v1',
+        apiKey: 'key-test',
+        toolProxy: true,
+      }),
+    );
+    await f.click('Refresh model list');
+    expect(f.document.querySelector('#agy-node-model-options option')?.getAttribute('value')).toBe('gemini-4-carbon');
+    await f.click('Gemini overrides');
+    f.input('agy-override-gemini-native', 'gemini-4-carbon');
+    await f.click('Apply override');
+    expect(saveModel).toHaveBeenCalledWith(
+      expect.objectContaining({
+        nodeId: 'models/node-test',
+        externalModelName: 'gemini-4-carbon',
+        nativeOverrideId: 'gemini-native',
+      }),
+    );
   });
 });

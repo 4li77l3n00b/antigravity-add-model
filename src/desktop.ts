@@ -1,7 +1,9 @@
 /** Custom-model integration installed alongside the current vendor desktop runtime. */
 import { app, dialog, session } from 'electron';
 import { registerCustomModelHandlers } from './customIpc';
-import { getProxyPort, setLanguageServerPortResolver, stopProxy } from './proxy';
+import { registerRemoteAcp } from './remoteAcpIpc';
+import { LOCAL_AUDIO_METHODS, LOCAL_AUDIO_PATH } from './proxy/localTranscription';
+import { getProxyPort, isToolProxyConfigured, setLanguageServerPortResolver, stopProxy } from './proxy';
 
 let installed = false;
 
@@ -10,6 +12,7 @@ export function install(getLanguageServerPort: () => number): void {
   installed = true;
   setLanguageServerPortResolver(getLanguageServerPort);
   registerCustomModelHandlers();
+  registerRemoteAcp(getLanguageServerPort);
 
   // Registered before the vendor's ready callback, without replacing its startup,
   // updater, WSL integration, certificate policy, or window configuration.
@@ -26,7 +29,13 @@ export function install(getLanguageServerPort: () => number): void {
       ) {
         return callback({});
       }
-      if (/(?:\/|\.)LanguageServerService\/SetCloudCodeURL$/.test(url.pathname)) {
+      const localAudio =
+        /^(?:\/exa\.language_server_pb\.LanguageServerService\/|\/LanguageServerService\/)([^/]+)$/.exec(url.pathname);
+      if (localAudio && LOCAL_AUDIO_METHODS.includes(localAudio[1]) && isToolProxyConfigured()) {
+        (callback as (value: { redirectURL: string }) => void)({
+          redirectURL: `http://127.0.0.1:${proxyPort}${LOCAL_AUDIO_PATH}${localAudio[1]}`,
+        });
+      } else if (/(?:\/|\.)LanguageServerService\/SetCloudCodeURL$/.test(url.pathname)) {
         callback({ cancel: true });
       } else if (/(?:\/|\.)LanguageServerService\/GetAvailableModels$/.test(url.pathname)) {
         (callback as (value: { redirectURL: string }) => void)({

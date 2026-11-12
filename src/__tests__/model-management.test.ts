@@ -51,22 +51,47 @@ describe('Google fleet account actions', () => {
     manager.saveModel({ ...googleEntry, googleAccounts: [account], googlePool: { maxConcurrency: 1 } });
     const lease = await acquireGoogleAccount(googleEntry.name, [account], { maxConcurrency: 1 });
     manager.googleSelectAccount({ modelName: googleEntry.name, accountId: account.id });
-    manager.saveModel({ ...manager.store.list()[0], googlePool: { preferredAccountId: account.id, maxConcurrency: 1, strategy: 'adaptive' } });
-    expect(getGooglePoolStatus().find(value => value.id === account.id)?.inFlight).toBe(1);
+    manager.saveModel({
+      ...manager.store.list()[0],
+      googlePool: { preferredAccountId: account.id, maxConcurrency: 1, strategy: 'adaptive' },
+    });
+    expect(getGooglePoolStatus().find((value) => value.id === account.id)?.inFlight).toBe(1);
     await expect(acquireGoogleAccount(googleEntry.name, [account], { maxConcurrency: 1 })).rejects.toThrow(/eligible/);
     lease.release({ status: 429, retryAfterMs: 60000 });
     manager.googleSelectAccount({ modelName: googleEntry.name, accountId: account.id });
-    await expect(acquireGoogleAccount(googleEntry.name, [account], { preferredAccountId: account.id })).rejects.toThrow(/eligible/);
+    await expect(acquireGoogleAccount(googleEntry.name, [account], { preferredAccountId: account.id })).rejects.toThrow(
+      /eligible/,
+    );
     resetGoogleAccountState();
   });
   it('reconnects the selected pool using new pending tokens and preserves other pools', async () => {
     const { directory } = setup();
-    const fresh = { id: 'new-login-id', email: 'same@example.com', label: 'same@example.com', accessToken: 'new-access', refreshToken: 'new-refresh', clientId: 'fixture.apps.googleusercontent.com', expiresAt: Date.now() + 3600000 };
+    const fresh = {
+      id: 'new-login-id',
+      email: 'same@example.com',
+      label: 'same@example.com',
+      accessToken: 'new-access',
+      refreshToken: 'new-refresh',
+      clientId: 'fixture.apps.googleusercontent.com',
+      expiresAt: Date.now() + 3600000,
+    };
     const manager = createModelManager(directory, codec, async () => {}, { loginGoogleAccount: async () => fresh });
-    for (const name of ['models/first', 'models/second']) manager.saveModel({ ...googleEntry, name, customHeaders: { 'X-Private': 'keep-secret' }, googleAccounts: [
-      { ...fresh, id: 'saved-id', label: 'Work account', accessToken: 'revoked-access', refreshToken: 'revoked-refresh' },
-      { id: 'other', accessToken: 'other-access' },
-    ] });
+    for (const name of ['models/first', 'models/second'])
+      manager.saveModel({
+        ...googleEntry,
+        name,
+        customHeaders: { 'X-Private': 'keep-secret' },
+        googleAccounts: [
+          {
+            ...fresh,
+            id: 'saved-id',
+            label: 'Work account',
+            accessToken: 'revoked-access',
+            refreshToken: 'revoked-refresh',
+          },
+          { id: 'other', accessToken: 'other-access' },
+        ],
+      });
     const login = await manager.googleLogin({ clientId: fresh.clientId });
     expect(login.account.refreshToken).toBe('********');
     manager.googleLinkAccount({ modelName: 'models/first', accountId: login.account.id, replaceAccountId: 'saved-id' });
@@ -74,41 +99,76 @@ describe('Google fleet account actions', () => {
       const accounts = model.googleAccounts as GoogleAccount[];
       expect(accounts[0].id).toBe('saved-id');
       expect(accounts[0].label).toBe('Work account');
-      expect(codec.decryptString(accounts[0].refreshToken!)).toBe(model.name === 'models/first' ? 'new-refresh' : 'revoked-refresh');
+      expect(codec.decryptString(accounts[0].refreshToken!)).toBe(
+        model.name === 'models/first' ? 'new-refresh' : 'revoked-refresh',
+      );
       expect(codec.decryptString(accounts[1].accessToken!)).toBe('other-access');
       expect(codec.decryptString((model.customHeaders as Record<string, string>)['X-Private'])).toBe('keep-secret');
     }
   });
   it('deduplicates matching emails and scopes preference and removal to the selected pool', async () => {
     const { directory } = setup();
-    const account = { id: 'pending', email: 'SAME@example.com', accessToken: 'new-access', clientId: 'fixture.apps.googleusercontent.com', expiresAt: Date.now() + 3600000 };
+    const account = {
+      id: 'pending',
+      email: 'SAME@example.com',
+      accessToken: 'new-access',
+      clientId: 'fixture.apps.googleusercontent.com',
+      expiresAt: Date.now() + 3600000,
+    };
     const manager = createModelManager(directory, codec, async () => {}, { loginGoogleAccount: async () => account });
-    manager.saveModel({ ...googleEntry, googleAccounts: [{ id: 'saved', email: 'same@example.com', accessToken: 'old-access' }, { id: 'standby', accessToken: 'standby-token' }] });
-    manager.saveModel({ ...googleEntry, name: 'models/last', googleAccounts: [{ id: 'saved', email: 'same@example.com', accessToken: 'old-access' }] });
+    manager.saveModel({
+      ...googleEntry,
+      googleAccounts: [
+        { id: 'saved', email: 'same@example.com', accessToken: 'old-access' },
+        { id: 'standby', accessToken: 'standby-token' },
+      ],
+    });
+    manager.saveModel({
+      ...googleEntry,
+      name: 'models/last',
+      googleAccounts: [{ id: 'saved', email: 'same@example.com', accessToken: 'old-access' }],
+    });
     const login = await manager.googleLogin({ clientId: account.clientId });
     manager.googleLinkAccount({ modelName: googleEntry.name, accountId: login.account.id });
-    expect((manager.store.read()[0].googleAccounts as GoogleAccount[])).toHaveLength(2);
+    expect(manager.store.read()[0].googleAccounts as GoogleAccount[]).toHaveLength(2);
     manager.googleSelectAccount({ modelName: googleEntry.name, accountId: 'saved' });
     expect((manager.store.read()[0].googlePool as { preferredAccountId: string }).preferredAccountId).toBe('saved');
     expect(manager.store.read()[1].googlePool).toBeUndefined();
     manager.googleRemoveAccount({ modelName: 'models/last', accountId: 'saved' });
     expect(manager.store.read()[1].enabled).toBe(false);
-    expect((manager.store.read()[0].googleAccounts as GoogleAccount[]).some(value => value.id === 'saved')).toBe(true);
+    expect((manager.store.read()[0].googleAccounts as GoogleAccount[]).some((value) => value.id === 'saved')).toBe(
+      true,
+    );
     expect(manager.store.read()[1].googleAccounts).toEqual([]);
     expect((manager.store.read()[1].googlePool as { preferredAccountId?: string }).preferredAccountId).toBeUndefined();
   });
   it('does not partially write a fleet link when one pool exceeds its account limit', async () => {
     const { directory } = setup();
-    const account = { id: 'pending', accessToken: 'new-access', clientId: 'fixture.apps.googleusercontent.com', expiresAt: Date.now() + 3600000 };
+    const account = {
+      id: 'pending',
+      accessToken: 'new-access',
+      clientId: 'fixture.apps.googleusercontent.com',
+      expiresAt: Date.now() + 3600000,
+    };
     const manager = createModelManager(directory, codec, async () => {}, { loginGoogleAccount: async () => account });
     manager.saveModel({ ...googleEntry, googleAccounts: [{ id: 'old', accessToken: 'old' }] });
-    manager.saveModel({ ...googleEntry, name: 'models/full', googleAccounts: Array.from({ length: 50 }, (_, i) => ({ id: `account-${i}`, accessToken: 'token' })) });
+    manager.saveModel({
+      ...googleEntry,
+      name: 'models/full',
+      googleAccounts: Array.from({ length: 50 }, (_, i) => ({ id: `account-${i}`, accessToken: 'token' })),
+    });
     const before = fs.readFileSync(manager.store.filename, 'utf8');
     const login = await manager.googleLogin({ clientId: account.clientId });
-    expect(() => manager.googleLinkAccount({ modelName: 'models/full', accountId: login.account.id })).toThrow(/50 accounts/);
+    expect(() => manager.googleLinkAccount({ modelName: 'models/full', accountId: login.account.id })).toThrow(
+      /50 accounts/,
+    );
     expect(fs.readFileSync(manager.store.filename, 'utf8')).toBe(before);
-    expect(() => manager.googleLinkAccount({ modelName: googleEntry.name, accountId: 'missing-login' })).toThrow(/expired/);
-    expect(() => manager.googleRemoveAccount({ modelName: googleEntry.name, accountId: 'missing' })).toThrow(/No saved/);
+    expect(() => manager.googleLinkAccount({ modelName: googleEntry.name, accountId: 'missing-login' })).toThrow(
+      /expired/,
+    );
+    expect(() => manager.googleRemoveAccount({ modelName: googleEntry.name, accountId: 'missing' })).toThrow(
+      /No saved/,
+    );
   });
 });
 afterEach(async () => {
@@ -125,6 +185,30 @@ afterEach(async () => {
 });
 
 describe('model storage and compatibility', () => {
+  it('selects one encrypted tool source and does not transfer that role to duplicated models', () => {
+    const { manager } = setup();
+    manager.store.save({ ...entry, toolProxy: true });
+    manager.store.save({ ...entry, name: 'models/second', toolProxy: true });
+    expect(manager.store.list().filter((model) => model.toolProxy)).toEqual([
+      expect.objectContaining({ name: 'models/second', apiKey: '********' }),
+    ]);
+    manager.store.save({ ...manager.store.list()[1], name: 'models/copy', copyFrom: 'models/second' });
+    expect(
+      manager.store
+        .list()
+        .filter((model) => model.toolProxy)
+        .map((model) => model.name),
+    ).toEqual(['models/second']);
+    expect(() =>
+      manager.store.import({
+        models: [
+          { ...entry, name: 'models/a', toolProxy: true },
+          { ...entry, name: 'models/b', toolProxy: true },
+        ],
+      }),
+    ).toThrow(/only one/);
+    expect(manager.store.list()).toHaveLength(3);
+  });
   it('creates explicit effort variants without changing existing models or exposing secrets', () => {
     const { manager } = setup();
     manager.saveModel({ ...entry, displayName: 'Reasoner', supportsThinking: true });
@@ -272,7 +356,9 @@ describe('model storage and compatibility', () => {
     });
     const result = await manager.googleTestAccount({ modelName: googleEntry.name, accountId: 'quota-endpoint' });
     expect(requests).toBe(1);
-    expect(result.quota.buckets).toEqual([{ id: 'fixture', remainingFraction: 0.75, resetTime: undefined, scope: 'user' }]);
+    expect(result.quota.buckets).toEqual([
+      { id: 'fixture', remainingFraction: 0.75, resetTime: undefined, scope: 'user' },
+    ]);
   });
 
   it('does not let a stale refresh overwrite credentials edited while a test was in flight', async () => {
@@ -433,7 +519,7 @@ describe('model storage and compatibility', () => {
     expect(manager.store.list()[0].displayName).toBe('Edited after login expiry');
   });
 
-  it('prefers a saved model\'s edited credentials over the retained pending login', async () => {
+  it("prefers a saved model's edited credentials over the retained pending login", async () => {
     const { directory } = setup();
     const account = {
       id: 'edited-batch',
@@ -1556,5 +1642,119 @@ describe('authenticated gateway integration', () => {
     );
     new ModelStore(manager.store.filename, codec).save(entry);
     await expect(manager.discoverModels(manager.store.list()[0])).rejects.toThrow('cannot be decrypted');
+  });
+});
+
+describe('custom nodes and native Gemini bindings', () => {
+  it('discovers node models with decrypted headers and marks disabled-node bindings unavailable', async () => {
+    const { createModelActions } = await import('../modelActions');
+    const { manager } = setup();
+    const url = await server((request, response) => {
+      expect(request.headers.authorization).toBe('Bearer node-private-key');
+      expect(request.headers['x-workspace']).toBe('node-private-header');
+      response.setHeader('Content-Type', 'application/json');
+      response.end(JSON.stringify({ data: [{ id: 'offered-model' }] }));
+    });
+    const node = manager.nodes.save({
+      displayName: 'Endpoint',
+      provider: 'openai',
+      apiUrl: `${url}/v1`,
+      apiKey: 'node-private-key',
+      customHeaders: { 'x-workspace': 'node-private-header' },
+    });
+    const actions = createModelActions(manager);
+    const result = (await actions['storage:discover-node-models'](node.name)) as any;
+    expect(result.models).toEqual([expect.objectContaining({ id: 'offered-model' })]);
+    manager.nodes.saveBinding({ nodeId: node.name, externalModelName: 'offered-model' });
+    manager.nodes.save({ ...manager.nodes.list()[0], enabled: false });
+    expect(actions['storage:get-custom-models']()).toEqual([
+      expect.objectContaining({ enabled: true, nodeEnabled: false }),
+    ]);
+  });
+
+  it('stores one private connection, masks secrets, resolves edits for all models and retains native identities', async () => {
+    const { readRuntimeModelConfig, rememberNativeGeminiCatalog } = await import('../customNodes');
+    const { directory, manager } = setup();
+    rememberNativeGeminiCatalog(directory, {
+      models: {
+        'gemini-native': { displayName: 'Gemini Native', model: 'MODEL_PLACEHOLDER_M20' },
+        'other-model': { displayName: 'Other model', model: 'MODEL_PLACEHOLDER_M21' },
+      },
+    });
+    const node = manager.nodes.save({
+      displayName: 'My node',
+      provider: 'openai',
+      apiUrl: 'https://node.example/v1',
+      apiKey: 'secret-node-key',
+      apiFormat: 'openai',
+      toolProxy: true,
+    });
+    expect(manager.nodes.list()[0].apiKey).toBe('********');
+    const binding = manager.nodes.saveBinding({
+      nodeId: node.name,
+      displayName: 'Gemini replacement',
+      externalModelName: 'gemini-4-carbon',
+      nativeOverrideId: 'gemini-native',
+      reasoningEffort: 'high',
+    });
+    manager.nodes.saveBinding({ nodeId: node.name, externalModelName: 'another-provider-model' });
+    const filename = path.join(directory, 'custom_models.json');
+    expect(fs.readFileSync(filename, 'utf8')).not.toContain('secret-node-key');
+    let runtime = readRuntimeModelConfig(filename);
+    expect(runtime.find((m) => m.name === binding.name)).toMatchObject({
+      apiUrl: 'https://node.example/v1',
+      nativeOverrideId: 'gemini-native',
+      nativeOverrideModel: 'MODEL_PLACEHOLDER_M20',
+      externalModelName: 'gemini-4-carbon',
+    });
+    expect(codec.decryptString(runtime[0].apiKey)).toBe('secret-node-key');
+    expect(runtime.filter((m) => m.toolProxy)).toHaveLength(1);
+    expect(runtime.find((m) => m.nodeToolSource).nodeToolSource).toBe(true);
+    expect(() =>
+      manager.nodes.saveBinding({
+        nodeId: node.name,
+        externalModelName: 'duplicate',
+        nativeOverrideId: 'gemini-native',
+      }),
+    ).toThrow('already');
+    expect(() =>
+      manager.nodes.saveBinding({
+        nodeId: node.name,
+        externalModelName: 'bad-target',
+        nativeOverrideId: 'other-model',
+      }),
+    ).toThrow('current native catalog');
+    expect(() => manager.nodes.save({ ...manager.nodes.list()[0], apiUrl: 'https://different.example/v1' })).toThrow(
+      'fresh credentials',
+    );
+    manager.nodes.save({
+      ...manager.nodes.list()[0],
+      apiUrl: 'https://different.example/v1',
+      apiKey: 'new-private-key',
+    });
+    runtime = readRuntimeModelConfig(filename);
+    expect(runtime.filter((m) => !m.nodeToolSource).every((m) => m.apiUrl === 'https://different.example/v1')).toBe(
+      true,
+    );
+    expect(
+      runtime.filter((m) => !m.nodeToolSource).every((m) => codec.decryptString(m.apiKey) === 'new-private-key'),
+    ).toBe(true);
+    expect(() => manager.nodes.delete(node.name)).toThrow('Remove the models');
+    manager.nodes.save({ ...manager.nodes.list()[0], enabled: false });
+    expect(readRuntimeModelConfig(filename).every((m) => m.enabled === false)).toBe(true);
+    const other = manager.nodes.save({
+      displayName: 'Second endpoint',
+      provider: 'openai',
+      apiUrl: 'https://second.example/v1',
+      apiKey: '',
+    });
+    manager.nodes.saveBinding({
+      nodeId: other.name,
+      externalModelName: 'replacement',
+      nativeOverrideId: 'gemini-native',
+    });
+    expect(() =>
+      manager.nodes.save({ ...manager.nodes.list().find((node) => node.name === runtime[0].nodeId), enabled: true }),
+    ).toThrow('already overrides');
   });
 });
