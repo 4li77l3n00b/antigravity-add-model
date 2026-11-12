@@ -6,7 +6,14 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { createHash } from 'node:crypto';
 import * as asar from '@electron/asar';
-import { deploy, fingerprint, parseArgs, preflight, resolveResources, REQUIRED_BUILD_FILES } from '../../scripts/deploy.mjs';
+import {
+  deploy,
+  fingerprint,
+  parseArgs,
+  preflight,
+  resolveResources,
+  REQUIRED_BUILD_FILES,
+} from '../../scripts/deploy.mjs';
 
 // Real ASAR packing can exceed the default 5 seconds on a busy Windows disk.
 // Allow it to finish before cleanup removes files still being packed.
@@ -91,7 +98,8 @@ afterEach(() => {
 describe('standalone deployment with real ASAR fixtures', () => {
   it('discovers the capitalized Linux installation directory', () => {
     const stat = vi.spyOn(fs, 'lstatSync').mockImplementation((filename) => {
-      if (String(filename) === '/opt/Antigravity/resources/app.asar') return {} as fs.Stats;
+      if (path.normalize(String(filename)) === path.normalize('/opt/Antigravity/resources/app.asar'))
+        return {} as fs.Stats;
       throw Object.assign(new Error('Missing fixture'), { code: 'ENOENT' });
     });
     const realpath = vi.spyOn(fs, 'realpathSync').mockImplementation((filename) => String(filename));

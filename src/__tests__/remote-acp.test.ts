@@ -254,7 +254,8 @@ describe('SSH ACP desktop controller', () => {
     await manager.action(1, 'save', { ...config, privateKey: 'must-not-persist', token: 'secret' });
     expect(manager.config()).toEqual(config);
     const file = join(dir, 'remote_acp.json');
-    expect(statSync(file).mode & 0o777).toBe(0o600);
+    // Windows uses ACLs and does not expose POSIX owner/group permission bits.
+    if (process.platform !== 'win32') expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(readFileSync(file, 'utf8')).not.toMatch(/secret|privateKey/);
     expect(await manager.action(2, 'poll')).toMatchObject({ state: 'disconnected' });
   });
@@ -387,7 +388,7 @@ describe('SSH ACP desktop controller', () => {
       pinned: false,
       archived: false,
     });
-    expect(statSync(join(dir, 'remote_acp_workspace.json')).mode & 0o777).toBe(0o600);
+    if (process.platform !== 'win32') expect(statSync(join(dir, 'remote_acp_workspace.json')).mode & 0o777).toBe(0o600);
     await expect(
       manager.action(1, 'project-save', { id: projectId, name: 'Moved', config: { ...config, cwd: '/moved' } }),
     ).rejects.toThrow('new project');
